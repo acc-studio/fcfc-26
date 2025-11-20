@@ -18,11 +18,13 @@ const TeamSwatch = ({ team, side }: { team: string, side: 'left' | 'right' }) =>
   const background = TEAM_COLORS[team] || '#333'; 
   return (
     <div className={clsx(
-      "relative flex-shrink-0 w-8 h-5 rounded-[3px] overflow-hidden shadow-sm",
-      side === 'left' ? "mr-5" : "ml-5"
+      "relative flex-shrink-0 rounded-[2px] overflow-hidden shadow-sm transition-all",
+      // Responsive Size: Smaller on mobile (w-5), larger on desktop (w-8)
+      "w-5 h-3.5 md:w-8 md:h-5",
+      side === 'left' ? "mr-2 md:mr-5" : "ml-2 md:ml-5"
     )}>
       <div className="absolute inset-0" style={{ background }} />
-      <div className="absolute inset-0 border border-black/10 rounded-[3px] ring-1 ring-inset ring-white/10" />
+      <div className="absolute inset-0 border border-black/10 rounded-[2px] ring-1 ring-inset ring-white/10" />
     </div>
   );
 };
@@ -33,7 +35,7 @@ export const MatchCard = ({ match, userBets, onBet, onSetResult, activeUser, isC
   
   const betKey = `${activeUser}_${match.id}`;
   const currentBet = userBets[betKey] || { home: 0, away: 0 };
-  const isFinished = match.status === 'FINISHED';
+  const isFinished = match.status === 'BİTTİ';
 
   useEffect(() => {
     if (match.result_home !== undefined && match.result_away !== undefined) {
@@ -49,17 +51,12 @@ export const MatchCard = ({ match, userBets, onBet, onSetResult, activeUser, isC
     setAdminScore(prev => ({ ...prev, [side]: val }));
   };
 
-  // The specific "Card Stock" color. 
-  // Slightly lighter and greener than the background to pop.
-  // Using a constant class string to ensure left/right sides match perfectly.
-  const CARD_BG_COLOR = isCommissioner 
-    ? "bg-[#2A1A1A]" // Reddish tint for Admin
-    : "bg-[#1A2621]"; // Premium Dark Card Green for Normal
+  const CARD_BG_COLOR = isCommissioner ? "bg-[#2A1A1A]" : "bg-[#1A2621]"; 
 
   return (
     <motion.div 
       layout
-      className="relative w-full mb-8 flex group filter drop-shadow-lg"
+      className="relative w-full mb-6 md:mb-8 flex group filter drop-shadow-lg"
     >
       {/* --- LEFT SIDE: Main Ticket --- */}
       <div className={clsx(
@@ -69,77 +66,79 @@ export const MatchCard = ({ match, userBets, onBet, onSetResult, activeUser, isC
         isExpanded ? "border-gold/40" : "border-white/5"
       )}>
         
-        {/* Metadata Header - Increased Padding (pt-7) */}
-        <div className="px-8 pt-7 pb-2 flex justify-between items-start font-mono text-[10px] uppercase tracking-widest text-paper/40">
-          <span>{match.date} — {match.time}</span>
-          <span className={isCommissioner ? "text-signal font-bold" : ""}>
-              {isCommissioner ? "ADMIN MODE" : match.stadium}
+        {/* Metadata Header: Reduced padding on mobile */}
+        <div className="px-4 pt-5 pb-1 md:px-8 md:pt-7 md:pb-2 flex justify-between items-start font-mono text-[9px] md:text-[10px] uppercase tracking-widest text-paper/40">
+          <span className="whitespace-nowrap">{match.date} — {match.time}</span>
+          <span className={clsx("text-right ml-2", isCommissioner ? "text-signal font-bold" : "")}>
+              {isCommissioner ? "HOCA" : match.stadium}
           </span>
         </div>
 
-        {/* Content Row - Increased Vertical Padding (py-4) */}
-        <div className="px-8 py-4 flex justify-between items-center relative z-10">
-          {/* Home */}
+        {/* Content Row: Tighter packing on mobile */}
+        <div className="px-4 py-3 md:px-8 md:py-4 flex justify-between items-center relative z-10">
+          
+          {/* Home Team */}
           <div className="flex items-center flex-1 justify-start min-w-0">
             <TeamSwatch team={match.home} side="left" />
-            <h3 className="text-3xl font-serif font-bold text-paper leading-none mt-[2px] truncate tracking-tight">
+            <h3 className="text-lg md:text-3xl font-serif font-bold text-paper leading-none mt-[2px] truncate tracking-tight">
               {match.home}
             </h3>
           </div>
           
-          {/* VS / Score */}
-          <div className="flex flex-col items-center px-4 shrink-0">
+          {/* Center Score/VS */}
+          <div className="flex flex-col items-center px-2 md:px-4 shrink-0">
             {isFinished ? (
-              <div className="font-mono font-bold text-2xl text-paper tracking-tighter">
-                {match.result_home} - {match.result_away}
+              <div className="font-mono font-bold text-lg md:text-2xl text-paper tracking-tighter">
+                {match.result_home}-{match.result_away}
               </div>
             ) : (
-              <span className="font-serif italic text-gold/30 text-xl pr-1">vs</span>
+              <span className="font-serif italic text-gold/30 text-sm md:text-xl pr-1">vs</span>
             )}
           </div>
 
-          {/* Away */}
+          {/* Away Team */}
           <div className="flex items-center flex-1 justify-end min-w-0">
-            <h3 className="text-3xl font-serif font-bold text-paper leading-none mt-[2px] text-right truncate tracking-tight">
+            <h3 className="text-lg md:text-3xl font-serif font-bold text-paper leading-none mt-[2px] text-right truncate tracking-tight">
               {match.away}
             </h3>
             <TeamSwatch team={match.away} side="right" />
           </div>
         </div>
 
-        {/* Bottom Spacer to give "Weight" */}
-        <div className="h-6" />
+        {/* Spacer */}
+        <div className="h-4 md:h-6" />
 
-        {/* Betting / Admin Area (Collapsible) */}
+        {/* Betting Area */}
         <motion.div 
             initial={false}
             animate={{ height: (isExpanded || isCommissioner) ? 'auto' : 0, opacity: (isExpanded || isCommissioner) ? 1 : 0 }}
             className="overflow-hidden border-t border-dashed border-white/10 bg-black/10"
         >
-            <div className="p-8">
+            <div className="p-4 md:p-8">
             {isCommissioner ? (
-                <div className="flex flex-col gap-6">
-                    <div className="flex justify-center gap-10">
+                <div className="flex flex-col gap-4 md:gap-6">
+                    <div className="flex justify-center gap-4 md:gap-10">
                         <ScoreDial label="Home" value={adminScore.home} onChange={(v) => handleAdminChange('home', v)} />
                         <ScoreDial label="Away" value={adminScore.away} onChange={(v) => handleAdminChange('away', v)} />
                     </div>
                     <button 
                         onClick={() => onSetResult(match.id, adminScore)}
-                        className="w-full py-4 bg-signal text-white font-mono font-bold uppercase tracking-wider hover:bg-red-600 transition-colors rounded"
+                        className="w-full py-3 md:py-4 bg-signal text-white font-mono font-bold uppercase tracking-wider hover:bg-red-600 transition-colors rounded text-xs md:text-sm"
                     >
-                        {isFinished ? "Update Result" : "Finalize Result"}
+                        {isFinished ? "Update" : "Finalize"}
                     </button>
                 </div>
             ) : (
                 !isFinished && (
-                    <div className="flex flex-col items-center gap-6">
-                        <div className="flex gap-10">
+                    <div className="flex flex-col items-center gap-4 md:gap-6">
+                        {/* Reduced gap for mobile to fit side-by-side */}
+                        <div className="flex gap-6 md:gap-10">
                             <ScoreDial label={match.home} value={currentBet.home} onChange={(v) => handleBetChange('home', v)} />
                             <ScoreDial label={match.away} value={currentBet.away} onChange={(v) => handleBetChange('away', v)} />
                         </div>
                         <button 
                             onClick={() => setIsExpanded(false)}
-                            className="w-full py-4 mt-2 bg-gold text-pitch-900 font-mono font-bold uppercase tracking-wider hover:bg-paper transition-colors rounded"
+                            className="w-full py-3 md:py-4 mt-1 bg-gold text-pitch-900 font-mono font-bold uppercase tracking-wider hover:bg-paper transition-colors rounded text-xs md:text-sm"
                         >
                             Confirm Bet
                         </button>
@@ -151,28 +150,27 @@ export const MatchCard = ({ match, userBets, onBet, onSetResult, activeUser, isC
 
         {/* Perforation Dots */}
         <div className="absolute right-0 top-0 bottom-0 w-[1px] border-r border-dashed border-white/10" />
-        {/* Top Hole - Matches Page BG (#0F1A15 / pitch-900) */}
         <div className="absolute -right-1.5 top-[-6px] w-3 h-3 rounded-full bg-[#0F1A15] z-20 shadow-[inset_0_-1px_2px_rgba(0,0,0,0.5)]" />
-        {/* Bottom Hole */}
         <div className="absolute -right-1.5 bottom-[-6px] w-3 h-3 rounded-full bg-[#0F1A15] z-20 shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]" />
       </div>
 
       {/* --- RIGHT SIDE: Stub --- */}
+      {/* Reduced width on mobile (w-10) vs desktop (w-16) */}
       <button 
         onClick={() => !isCommissioner && !isFinished && setIsExpanded(!isExpanded)}
         disabled={isCommissioner || isFinished}
         className={clsx(
-            "w-16 relative flex items-center justify-center cursor-pointer transition-colors duration-300",
+            "relative flex items-center justify-center cursor-pointer transition-colors duration-300",
+            "w-10 md:w-16", 
             CARD_BG_COLOR,
-            !isCommissioner && !isFinished && "hover:brightness-110"
+            !isCommissioner && !isFinished && "hover:brightness-110 active:brightness-125"
         )}
         style={{
             clipPath: 'polygon(0 0, 100% 0, 100% 10%, 90% 15%, 100% 20%, 100% 30%, 90% 35%, 100% 40%, 100% 50%, 90% 55%, 100% 60%, 100% 70%, 90% 75%, 100% 80%, 100% 90%, 90% 95%, 100% 100%, 0 100%)'
         }}
       >
-          {/* Vertical Text */}
-          <div className="rotate-90 whitespace-nowrap font-mono text-[10px] uppercase tracking-[0.2em] text-gold/50">
-             {isFinished ? "FINAL" : userBets[betKey] ? "EDIT" : "OPEN"}
+          <div className="rotate-90 whitespace-nowrap font-mono text-[9px] md:text-[10px] uppercase tracking-[0.2em] text-gold/50">
+             {isFinished ? "FIN" : userBets[betKey] ? "EDIT" : "BET"}
           </div>
       </button>
     </motion.div>
