@@ -10,13 +10,20 @@ export interface Match {
   result_away?: number;
 }
 
+export interface Player {
+  id: string;
+  name: string;
+  avatar: string;
+  code: string; // <--- NEW FIELD
+}
+
 export const PLAYERS = [
-  { id: 'p1', name: 'Özmerç', avatar: '🥃' },
-  { id: 'p2', name: 'Eren', avatar: '🎲' },
-  { id: 'p3', name: 'Melih', avatar: '🧿' },
-  { id: 'p4', name: 'Kaan', avatar: '🚀' },
-  { id: 'p5', name: 'Memih', avatar: '🍷' },
-  { id: 'p6', name: 'Aziz Cem', avatar: '🌲' },
+  { id: 'p1', name: 'Özmerç', avatar: '😼', code: '1hj8' },
+  { id: 'p2', name: 'Eren', avatar: '🤡', code: 'qw89' },
+  { id: 'p3', name: 'Melih', avatar: '🥴', code: 'rt74' },
+  { id: 'p4', name: 'Kaan', avatar: '😏', code: 'y674' },
+  { id: 'p5', name: 'Memih', avatar: '🤠', code: 'as56' },
+  { id: 'p6', name: 'Aziz Cem', avatar: '🫠', code: 'jh67' },
 ];
 
 export const TEAM_COLORS: Record<string, string> = {

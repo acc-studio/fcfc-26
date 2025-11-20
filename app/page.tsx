@@ -2,28 +2,39 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
-import { PLAYERS, Match } from '@/lib/data';
+import { PLAYERS, Match, Player } from '@/lib/data';
 import { MatchCard } from '@/components/MatchCard';
 import { Leaderboard } from '@/components/Leaderboard';
 import { supabase } from '@/lib/supabase';
+import { AuthModal } from '@/components/AuthModal'; // <--- Import Modal
 
 export default function WorldCupApp() {
   const [activeTab, setActiveTab] = useState<'matches' | 'table'>('matches');
-  const [currentUser, setCurrentUser] = useState('p1'); 
-  const [isCommissioner, setIsCommissioner] = useState(false); // Admin Toggle
   
+  // User & Auth State
+  const [currentUser, setCurrentUser] = useState<string | null>(null); // Start null to force selection
+  const [authModal, setAuthModal] = useState<{ isOpen: boolean; target: Player | null }>({
+    isOpen: false,
+    target: null
+  });
+
+  const [isCommissioner, setIsCommissioner] = useState(false);
   const [matches, setMatches] = useState<Match[]>([]);
   const [bets, setBets] = useState<Record<string, any>>({});
   const [isLoading, setIsLoading] = useState(true);
 
-  // 1. Fetch Initial Data (Matches + Bets)
+  // 1. Fetch Initial Data
   useEffect(() => {
+    // Attempt to restore user from session logic if desired, 
+    // but for now let's make them log in every refresh for security/feel.
+    // Or check localStorage for last user:
+    const lastUser = localStorage.getItem('pitch_club_user');
+    if (lastUser) setCurrentUser(lastUser);
+
     const fetchData = async () => {
-      // Load Matches (Ordered by ID)
       const { data: matchData } = await supabase.from('matches').select('*').order('id', { ascending: true });
       if (matchData) setMatches(matchData);
 
-      // Load Bets
       const { data: betData } = await supabase.from('bets').select('*');
       if (betData) {
         const betMap: Record<string, any> = {};
@@ -37,10 +48,8 @@ export default function WorldCupApp() {
 
     fetchData();
 
-    // 2. Realtime Subscriptions
     const channel = supabase
       .channel('realtime_pitch_club')
-      // Listen for new bets
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bets' }, (payload) => {
         const newRow = payload.new as any;
         if (newRow) {
@@ -50,7 +59,6 @@ export default function WorldCupApp() {
             }));
         }
       })
-      // Listen for Match Updates (Commissioner finalizes a game)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'matches' }, (payload) => {
         setMatches(prev => prev.map(m => m.id === payload.new.id ? payload.new as Match : m));
       })
@@ -61,48 +69,50 @@ export default function WorldCupApp() {
     };
   }, []);
 
-  // Handle User Betting
   const handleBet = async (matchId: number, score: { home: number, away: number }) => {
-    // Optimistic Update
-    setBets(prev => ({
-      ...prev,
-      [`${currentUser}_${matchId}`]: score
-    }));
-
-    // DB Update
-    await supabase
-      .from('bets')
-      .upsert({ 
+    if (!currentUser) return;
+    setBets(prev => ({ ...prev, [`${currentUser}_${matchId}`]: score }));
+    await supabase.from('bets').upsert({ 
         user_id: currentUser, 
         match_id: matchId, 
         home_score: score.home, 
         away_score: score.away 
-      }, { onConflict: 'user_id, match_id' });
+    }, { onConflict: 'user_id, match_id' });
   };
 
-  // Handle Commissioner Result Setting
   const handleSetResult = async (matchId: number, score: { home: number, away: number }) => {
-      // Update local state immediately
       setMatches(prev => prev.map(m => m.id === matchId ? { ...m, status: 'FINISHED', result_home: score.home, result_away: score.away } : m));
+      await supabase.from('matches').update({ status: 'FINISHED', result_home: score.home, result_away: score.away }).eq('id', matchId);
+  };
 
-      // DB Update
-      await supabase
-        .from('matches')
-        .update({ 
-            status: 'FINISHED', 
-            result_home: score.home, 
-            result_away: score.away 
-        })
-        .eq('id', matchId);
+  // AUTH LOGIC
+  const handleUserClick = (player: Player) => {
+    // If already logged in as this user, do nothing
+    if (currentUser === player.id) return;
+
+    // Open Modal
+    setAuthModal({ isOpen: true, target: player });
+  };
+
+  const handleAuthSuccess = (player: Player) => {
+    setCurrentUser(player.id);
+    localStorage.setItem('pitch_club_user', player.id); // Persist login
   };
 
   return (
     <div className="pb-24 pt-20 px-6 max-w-2xl mx-auto">
       
-      {/* Header */}
+      {/* Modal */}
+      <AuthModal 
+        isOpen={authModal.isOpen} 
+        targetUser={authModal.target} 
+        onClose={() => setAuthModal({ ...authModal, isOpen: false })}
+        onSuccess={handleAuthSuccess}
+      />
+
       <div className="flex flex-col items-start mb-12">
         <h1 className="text-5xl md:text-7xl font-serif font-black tracking-tight text-paper leading-[0.9]">
-          FCFC '26.
+          FCFC '26
         </h1>
         <div className="mt-4 flex items-center gap-4">
            <span className="font-mono text-xs text-gold tracking-widest uppercase border-b border-gold pb-1">
@@ -111,11 +121,9 @@ export default function WorldCupApp() {
         </div>
       </div>
 
-      {/* User Switcher */}
       <div className="mb-10">
         <div className="flex justify-between items-end mb-3">
             <p className="font-mono text-[10px] uppercase text-paper/40">Active Punter:</p>
-            {/* Secret Toggle */}
             <button 
                 onClick={() => setIsCommissioner(!isCommissioner)}
                 className={clsx(
@@ -123,14 +131,14 @@ export default function WorldCupApp() {
                     isCommissioner ? "bg-signal text-white" : "text-paper/10 hover:text-paper/30"
                 )}
             >
-                {isCommissioner ? "HOCA" : "🏁"}
+                {isCommissioner ? "Admin Active" : "π"}
             </button>
         </div>
         <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
           {PLAYERS.map((p) => (
             <button
               key={p.id}
-              onClick={() => setCurrentUser(p.id)}
+              onClick={() => handleUserClick(p)}
               className={clsx(
                 "px-4 py-2 rounded-full border text-xs font-mono transition-all whitespace-nowrap flex items-center gap-2",
                 currentUser === p.id 
@@ -142,6 +150,11 @@ export default function WorldCupApp() {
             </button>
           ))}
         </div>
+        {!currentUser && (
+            <p className="mt-4 text-center text-xs font-mono text-gold/60 animate-pulse">
+                Select your profile to begin...
+            </p>
+        )}
       </div>
 
       {isLoading ? (
@@ -163,7 +176,7 @@ export default function WorldCupApp() {
                     userBets={bets}
                     onBet={handleBet}
                     onSetResult={handleSetResult}
-                    activeUser={currentUser}
+                    activeUser={currentUser || ''} // Pass empty string if no user
                     isCommissioner={isCommissioner}
                 />
                 ))}
@@ -182,7 +195,6 @@ export default function WorldCupApp() {
         </AnimatePresence>
       )}
 
-      {/* Nav */}
       <nav className="fixed bottom-0 left-0 w-full z-50 bg-pitch-900/80 backdrop-blur-md border-t border-chalk">
         <div className="max-w-2xl mx-auto flex">
           <button 

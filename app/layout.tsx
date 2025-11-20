@@ -16,7 +16,7 @@ const chivo = Chivo_Mono({
 
 export const metadata: Metadata = {
   title: "FCFC '26",
-  description: "Premium World Cup Syndicate",
+  description: "FCFC'26 Tahmin Oyunu",
 };
 
 export default function RootLayout({
