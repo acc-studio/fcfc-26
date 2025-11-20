@@ -1,0 +1,20 @@
+# Project Rules: FCFC 26
+
+## Aesthetic Guidelines ("The Anti-Slop")
+- **Vibe:** 1970s Match Programme meets Modern Swiss Editorial.
+- **Colors:** Deep "Night Grass" Green (#0F1A15), Bone White (#E8E6D9), Matte Gold (#D4AF37).
+- **Typography:** Use 'Fraunces' for headers (Human, Historic) and 'Chivo Mono' for data (Tactical, Raw).
+- **Texture:** Never use flat solid colors for backgrounds. Always layer with noise/grain.
+- **Interaction:** Tactile, large tap targets. No standard HTML inputs. Use custom "dials" or sliders.
+- **Motion:** Smooth, staggered, CSS-heavy or Framer Motion. No jagged movements.
+
+## Tech Stack
+- Next.js 14+ (App Router)
+- Tailwind CSS (Use arbitrary values only if necessary, prefer theme config)
+- Framer Motion
+- TypeScript
+
+## Coding Style
+- Use functional components.
+- meaningful variable names (e.g., `matchData` not `data`).
+- Avoid "startup" aesthetics (blue buttons, drop shadows, rounded-full buttons).
