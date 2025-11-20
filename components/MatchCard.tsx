@@ -35,7 +35,7 @@ export const MatchCard = ({ match, userBets, onBet, onSetResult, activeUser, isC
   
   const betKey = `${activeUser}_${match.id}`;
   const currentBet = userBets[betKey] || { home: 0, away: 0 };
-  const isFinished = match.status === 'BİTTİ';
+  const isFinished = match.status === 'FINISHED';
 
   useEffect(() => {
     if (match.result_home !== undefined && match.result_away !== undefined) {
