@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react'; // <--- Added useRef
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import { PLAYERS, Match, Player } from '@/lib/data';
@@ -7,10 +7,9 @@ import { MatchCard } from '@/components/MatchCard';
 import { Leaderboard } from '@/components/Leaderboard';
 import { supabase } from '@/lib/supabase';
 import { AuthModal } from '@/components/AuthModal'; 
-import { SecretSanta } from '@/components/SecretSanta'; // <--- Ensure this exists
+import { SecretSanta } from '@/components/SecretSanta';
 
 export default function WorldCupApp() {
-  // 1. Add 'santa' to the allowed tabs
   const [activeTab, setActiveTab] = useState<'matches' | 'table' | 'santa'>('matches');
   
   const [currentUser, setCurrentUser] = useState<string | null>(null);
@@ -24,10 +23,33 @@ export default function WorldCupApp() {
   const [bets, setBets] = useState<Record<string, any>>({});
   const [isLoading, setIsLoading] = useState(true);
 
+  // --- AUDIO LOGIC (THE ANNOYING PLAYER) ---
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    // Initialize the music
+    // Ensure 'christmas_slop.mp3' is in your /public folder
+    audioRef.current = new Audio('/christmas_slop.mp3');
+    audioRef.current.loop = true;
+    audioRef.current.volume = 0.6; 
+  }, []);
+
+  // Watch the tab switch to Play/Pause
+  useEffect(() => {
+    if (activeTab === 'santa') {
+      audioRef.current?.play().catch((e) => console.log("Audio autoplay blocked:", e));
+    } else {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+    }
+  }, [activeTab]);
+  // -----------------------------------------
+
   // --- THEME LOGIC ---
   const isChristmas = activeTab === 'santa';
   
-  // Dynamic Background Class (Red for Santa, Pitch Green for Normal)
   const appBackground = isChristmas 
     ? "bg-red-950 transition-colors duration-1000" 
     : "bg-pitch-900 transition-colors duration-500";
@@ -101,7 +123,6 @@ export default function WorldCupApp() {
   };
 
   return (
-    // 2. Wrap everything in a div that handles the full-screen background color change
     <div className={clsx("min-h-screen transition-all duration-700", appBackground)}>
       
       <AuthModal 
@@ -157,9 +178,7 @@ export default function WorldCupApp() {
                 className={clsx(
                     "px-4 py-2 rounded-full border text-xs font-mono transition-all whitespace-nowrap flex items-center gap-2",
                     currentUser === p.id 
-                    // If Selected: White/Red for Xmas, Bone/Green for Normal
                     ? (isChristmas ? "bg-white text-red-900 border-white font-bold shadow-lg" : "bg-paper text-pitch-900 border-paper font-bold")
-                    // If Not Selected: Ghost White for Xmas, Ghost Gold for Normal
                     : (isChristmas ? "border-white/30 text-white/70 hover:border-white" : "border-chalk text-paper/60 hover:border-gold/50")
                 )}
                 >
