@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
 import { ScoreDial } from './ScoreDial';
-import { Match, TEAM_FLAGS } from '@/lib/data'; // Changed import from TEAM_COLORS to TEAM_FLAGS
+import { Match, TEAM_ISO } from '@/lib/data'; // Changed to TEAM_ISO
 
 interface MatchCardProps {
   match: Match;
@@ -14,15 +14,35 @@ interface MatchCardProps {
   isCommissioner: boolean;
 }
 
-// NEW SWATCH COMPONENT (Emoji Based)
+// NEW SWATCH COMPONENT (Using Real Images via CDN)
 const TeamSwatch = ({ team, side }: { team: string, side: 'left' | 'right' }) => {
-  const flag = TEAM_FLAGS[team] || '🏳️'; // Fallback to white flag if unknown
+  const code = TEAM_ISO[team];
+  
+  // Fallback for missing codes
+  if (!code) {
+    return (
+      <div className={clsx(
+        "flex-shrink-0 w-6 h-4 md:w-8 md:h-6 bg-gray-700 rounded-sm flex items-center justify-center text-[10px]",
+        side === 'left' ? "mr-2 md:mr-4" : "ml-2 md:ml-4"
+      )}>
+        ?
+      </div>
+    );
+  }
+
   return (
     <div className={clsx(
-      "flex-shrink-0 flex items-center justify-center text-2xl md:text-4xl leading-none filter drop-shadow-sm transform hover:scale-110 transition-transform duration-200",
-      side === 'left' ? "mr-2 md:mr-4" : "ml-2 md:ml-4"
+      "flex-shrink-0 relative flex items-center justify-center filter drop-shadow-sm",
+      "w-6 h-4 md:w-9 md:h-6", // Fixed aspect ratio for flags
+      side === 'left' ? "mr-3 md:mr-5" : "ml-3 md:ml-5"
     )}>
-      {flag}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img 
+        src={`https://flagcdn.com/w80/${code}.png`}
+        srcSet={`https://flagcdn.com/w160/${code}.png 2x`}
+        alt={team}
+        className="w-full h-full object-cover rounded-[2px] border border-white/10"
+      />
     </div>
   );
 };

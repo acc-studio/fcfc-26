@@ -27,64 +27,65 @@ export const PLAYERS = [
   { id: 'p6', name: 'Aziz Cem', avatar: '🫠', code: 'jh67' },
 ];
 
-// Qualified Teams for 2026 (Flat Emojis)
-export const TEAM_FLAGS: Record<string, string> = {
+// Map Country Name -> ISO Code for FlagCDN
+// Note: England/Scotland use special GB subdivision codes
+export const TEAM_ISO: Record<string, string> = {
   // Co-hosts
-  "Canada": "🇨🇦",
-  "Mexico": "🇲🇽",
-  "USA": "🇺🇸",
+  "Canada": "ca",
+  "Mexico": "mx",
+  "USA": "us",
   
   // AFC
-  "Australia": "🇦🇺",
-  "IR Iran": "🇮🇷",
-  "Japan": "🇯🇵",
-  "Jordan": "🇯🇴",
-  "Korea Republic": "🇰🇷",
-  "Qatar": "🇶🇦",
-  "Saudi Arabia": "🇸🇦",
-  "Uzbekistan": "🇺🇿",
+  "Australia": "au",
+  "IR Iran": "ir",
+  "Japan": "jp",
+  "Jordan": "jo",
+  "Korea Republic": "kr",
+  "Qatar": "qa",
+  "Saudi Arabia": "sa",
+  "Uzbekistan": "uz",
   
   // CAF
-  "Algeria": "🇩🇿",
-  "Cabo Verde": "🇨🇻",
-  "Côte d'Ivoire": "🇨🇮",
-  "Egypt": "🇪🇬",
-  "Ghana": "🇬🇭",
-  "Morocco": "🇲🇦",
-  "Senegal": "🇸🇳",
-  "South Africa": "🇿🇦",
-  "Tunisia": "🇹🇳",
+  "Algeria": "dz",
+  "Cabo Verde": "cv",
+  "Côte d'Ivoire": "ci",
+  "Egypt": "eg",
+  "Ghana": "gh",
+  "Morocco": "ma",
+  "Senegal": "sn",
+  "South Africa": "za",
+  "Tunisia": "tn",
   
   // Concacaf
-  "Curaçao": "🇨🇼",
-  "Haiti": "🇭🇹",
-  "Panama": "🇵🇦",
+  "Curaçao": "cw",
+  "Haiti": "ht",
+  "Panama": "pa",
   
   // CONMEBOL
-  "Argentina": "🇦🇷",
-  "Brazil": "🇧🇷",
-  "Colombia": "🇨🇴",
-  "Ecuador": "🇪🇨",
-  "Paraguay": "🇵🇾",
-  "Uruguay": "🇺🇾",
+  "Argentina": "ar",
+  "Brazil": "br",
+  "Colombia": "co",
+  "Ecuador": "ec",
+  "Paraguay": "py",
+  "Uruguay": "uy",
   
   // OFC
-  "New Zealand": "🇳🇿",
+  "New Zealand": "nz",
   
   // UEFA
-  "Austria": "🇦🇹",
-  "Belgium": "🇧🇪",
-  "Croatia": "🇭🇷",
-  "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
-  "France": "🇫🇷",
-  "Germany": "🇩🇪",
-  "Netherlands": "🇳🇱",
-  "Norway": "🇳🇴",
-  "Portugal": "🇵🇹",
-  "Scotland": "🏴󠁧󠁢󠁳󠁣󠁴󠁿",
-  "Spain": "🇪🇸",
-  "Switzerland": "🇨🇭",
+  "Austria": "at",
+  "Belgium": "be",
+  "Croatia": "hr",
+  "England": "gb-eng", // Special code
+  "France": "fr",
+  "Germany": "de",
+  "Netherlands": "nl",
+  "Norway": "no",
+  "Portugal": "pt",
+  "Scotland": "gb-sct", // Special code
+  "Spain": "es",
+  "Switzerland": "ch",
   
-  // Legacy / Fallbacks (Just in case you have old test data in DB)
-  "Italy": "🇮🇹",
+  // Fallbacks
+  "Italy": "it",
 };
