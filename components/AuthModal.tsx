@@ -21,6 +21,7 @@ export const AuthModal = ({ isOpen, targetUser, onClose, onSuccess }: AuthModalP
     if (isOpen && inputRef.current) {
       setInput('');
       setError(false);
+      // Small timeout ensures the keyboard pops up on mobile
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [isOpen]);
@@ -29,14 +30,13 @@ export const AuthModal = ({ isOpen, targetUser, onClose, onSuccess }: AuthModalP
     e?.preventDefault();
     if (!targetUser) return;
 
-    if (input === targetUser.code) {
+    // Case insensitive check
+    if (input.toUpperCase() === targetUser.code.toUpperCase()) {
       onSuccess(targetUser);
       onClose();
     } else {
       setError(true);
       setInput(''); // Clear input on fail
-      // Shake effect logic is handled by Framer Motion variants below if desired, 
-      // but clearing input + red text is enough for MVP
     }
   };
 
@@ -72,15 +72,19 @@ export const AuthModal = ({ isOpen, targetUser, onClose, onSuccess }: AuthModalP
               <form onSubmit={handleSubmit} className="w-full">
                 <input
                   ref={inputRef}
-                  type="tel" // Numeric keyboard on mobile
+                  type="text"                 // Changed from 'tel' to 'text'
+                  inputMode="text"            // Explicitly requesting text keyboard
+                  autoCapitalize="characters" // Forces uppercase keyboard on mobile
+                  autoComplete="off"
+                  autoCorrect="off"
                   maxLength={4}
                   value={input}
                   onChange={(e) => {
                     setError(false);
-                    setInput(e.target.value);
+                    setInput(e.target.value.toUpperCase()); // Force visual uppercase
                   }}
                   className={clsx(
-                    "w-full bg-pitch-900 border-b-2 text-center font-mono text-3xl tracking-[1em] py-4 text-paper focus:outline-none transition-colors",
+                    "w-full bg-pitch-900 border-b-2 text-center font-mono text-3xl tracking-[0.5em] py-4 text-paper focus:outline-none transition-colors",
                     error ? "border-signal text-signal placeholder:text-signal/50" : "border-chalk focus:border-gold"
                   )}
                   placeholder="...."
