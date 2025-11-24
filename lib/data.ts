@@ -6,7 +6,7 @@ export interface Match {
   time: string;
   stadium: string;
   status: 'UPCOMING' | 'LIVE' | 'FINISHED';
-  result_home?: number; // Changed from nested object to flat DB columns
+  result_home?: number;
   result_away?: number;
 }
 
@@ -14,9 +14,10 @@ export interface Player {
   id: string;
   name: string;
   avatar: string;
-  code: string; // <--- NEW FIELD
+  code: string;
 }
 
+// Your Custom Players (PRESERVED)
 export const PLAYERS = [
   { id: 'p1', name: 'Özmerç', avatar: '😼', code: '1hj8' },
   { id: 'p2', name: 'Eren', avatar: '🤡', code: 'qw89' },
@@ -26,15 +27,64 @@ export const PLAYERS = [
   { id: 'p6', name: 'Aziz Cem', avatar: '🫠', code: 'jh67' },
 ];
 
-export const TEAM_COLORS: Record<string, string> = {
-  "Mexico": "linear-gradient(90deg, #006847 33%, #FFFFFF 33%, #FFFFFF 66%, #CE1126 66%)",
-  "France": "linear-gradient(90deg, #0055A4 33%, #FFFFFF 33%, #FFFFFF 66%, #EF4135 66%)",
-  "USA": "linear-gradient(135deg, #3C3B6E 50%, #B22234 50%)", 
-  "Italy": "linear-gradient(90deg, #009246 33%, #FFFFFF 33%, #FFFFFF 66%, #CE2B37 66%)",
-  "Canada": "linear-gradient(90deg, #FF0000 33%, #FFFFFF 33%, #FFFFFF 66%, #FF0000 66%)",
-  "Brazil": "linear-gradient(135deg, #FFDF00 50%, #009c3b 50%)", 
-  "Argentina": "linear-gradient(to bottom, #75AADB 33%, #FFFFFF 33%, #FFFFFF 66%, #75AADB 66%)",
-  "Germany": "linear-gradient(to bottom, #000000 33%, #DD0000 33%, #DD0000 66%, #FFCE00 66%)",
-  "England": "linear-gradient(90deg, #FFFFFF 45%, #CE1124 45%, #CE1124 55%, #FFFFFF 55%)", 
-  "Japan": "radial-gradient(circle, #BC002D 35%, #FFFFFF 36%)",
+// Qualified Teams for 2026 (Flat Emojis)
+export const TEAM_FLAGS: Record<string, string> = {
+  // Co-hosts
+  "Canada": "🇨🇦",
+  "Mexico": "🇲🇽",
+  "USA": "🇺🇸",
+  
+  // AFC
+  "Australia": "🇦🇺",
+  "IR Iran": "🇮🇷",
+  "Japan": "🇯🇵",
+  "Jordan": "🇯🇴",
+  "Korea Republic": "🇰🇷",
+  "Qatar": "🇶🇦",
+  "Saudi Arabia": "🇸🇦",
+  "Uzbekistan": "🇺🇿",
+  
+  // CAF
+  "Algeria": "🇩🇿",
+  "Cabo Verde": "🇨🇻",
+  "Côte d'Ivoire": "🇨🇮",
+  "Egypt": "🇪🇬",
+  "Ghana": "🇬🇭",
+  "Morocco": "🇲🇦",
+  "Senegal": "🇸🇳",
+  "South Africa": "🇿🇦",
+  "Tunisia": "🇹🇳",
+  
+  // Concacaf
+  "Curaçao": "🇨🇼",
+  "Haiti": "🇭🇹",
+  "Panama": "🇵🇦",
+  
+  // CONMEBOL
+  "Argentina": "🇦🇷",
+  "Brazil": "🇧🇷",
+  "Colombia": "🇨🇴",
+  "Ecuador": "🇪🇨",
+  "Paraguay": "🇵🇾",
+  "Uruguay": "🇺🇾",
+  
+  // OFC
+  "New Zealand": "🇳🇿",
+  
+  // UEFA
+  "Austria": "🇦🇹",
+  "Belgium": "🇧🇪",
+  "Croatia": "🇭🇷",
+  "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
+  "France": "🇫🇷",
+  "Germany": "🇩🇪",
+  "Netherlands": "🇳🇱",
+  "Norway": "🇳🇴",
+  "Portugal": "🇵🇹",
+  "Scotland": "🏴󠁧󠁢󠁳󠁣󠁴󠁿",
+  "Spain": "🇪🇸",
+  "Switzerland": "🇨🇭",
+  
+  // Legacy / Fallbacks (Just in case you have old test data in DB)
+  "Italy": "🇮🇹",
 };

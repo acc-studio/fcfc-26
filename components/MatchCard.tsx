@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
 import { ScoreDial } from './ScoreDial';
-import { Match, TEAM_COLORS } from '@/lib/data';
+import { Match, TEAM_FLAGS } from '@/lib/data'; // Changed import from TEAM_COLORS to TEAM_FLAGS
 
 interface MatchCardProps {
   match: Match;
@@ -14,17 +14,15 @@ interface MatchCardProps {
   isCommissioner: boolean;
 }
 
+// NEW SWATCH COMPONENT (Emoji Based)
 const TeamSwatch = ({ team, side }: { team: string, side: 'left' | 'right' }) => {
-  const background = TEAM_COLORS[team] || '#333'; 
+  const flag = TEAM_FLAGS[team] || '🏳️'; // Fallback to white flag if unknown
   return (
     <div className={clsx(
-      "relative flex-shrink-0 rounded-[2px] overflow-hidden shadow-sm transition-all",
-      // Responsive Size: Smaller on mobile (w-5), larger on desktop (w-8)
-      "w-5 h-3.5 md:w-8 md:h-5",
-      side === 'left' ? "mr-2 md:mr-5" : "ml-2 md:ml-5"
+      "flex-shrink-0 flex items-center justify-center text-2xl md:text-4xl leading-none filter drop-shadow-sm transform hover:scale-110 transition-transform duration-200",
+      side === 'left' ? "mr-2 md:mr-4" : "ml-2 md:ml-4"
     )}>
-      <div className="absolute inset-0" style={{ background }} />
-      <div className="absolute inset-0 border border-black/10 rounded-[2px] ring-1 ring-inset ring-white/10" />
+      {flag}
     </div>
   );
 };
@@ -66,15 +64,15 @@ export const MatchCard = ({ match, userBets, onBet, onSetResult, activeUser, isC
         isExpanded ? "border-gold/40" : "border-white/5"
       )}>
         
-        {/* Metadata Header: Reduced padding on mobile */}
+        {/* Metadata Header */}
         <div className="px-4 pt-5 pb-1 md:px-8 md:pt-7 md:pb-2 flex justify-between items-start font-mono text-[9px] md:text-[10px] uppercase tracking-widest text-paper/40">
           <span className="whitespace-nowrap">{match.date} — {match.time}</span>
           <span className={clsx("text-right ml-2", isCommissioner ? "text-signal font-bold" : "")}>
-              {isCommissioner ? "HOCA" : match.stadium}
+              {isCommissioner ? "ADMIN" : match.stadium}
           </span>
         </div>
 
-        {/* Content Row: Tighter packing on mobile */}
+        {/* Content Row */}
         <div className="px-4 py-3 md:px-8 md:py-4 flex justify-between items-center relative z-10">
           
           {/* Home Team */}
@@ -131,7 +129,6 @@ export const MatchCard = ({ match, userBets, onBet, onSetResult, activeUser, isC
             ) : (
                 !isFinished && (
                     <div className="flex flex-col items-center gap-4 md:gap-6">
-                        {/* Reduced gap for mobile to fit side-by-side */}
                         <div className="flex gap-6 md:gap-10">
                             <ScoreDial label={match.home} value={currentBet.home} onChange={(v) => handleBetChange('home', v)} />
                             <ScoreDial label={match.away} value={currentBet.away} onChange={(v) => handleBetChange('away', v)} />
@@ -155,7 +152,6 @@ export const MatchCard = ({ match, userBets, onBet, onSetResult, activeUser, isC
       </div>
 
       {/* --- RIGHT SIDE: Stub --- */}
-      {/* Reduced width on mobile (w-10) vs desktop (w-16) */}
       <button 
         onClick={() => !isCommissioner && !isFinished && setIsExpanded(!isExpanded)}
         disabled={isCommissioner || isFinished}
