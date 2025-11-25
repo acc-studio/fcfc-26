@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
 import { ScoreDial } from './ScoreDial';
-import { Match, TEAM_ISO } from '@/lib/data'; // Changed to TEAM_ISO
+import { Match, TEAM_ISO } from '@/lib/data';
 
 interface MatchCardProps {
   match: Match;
@@ -98,7 +98,7 @@ export const MatchCard = ({ match, userBets, onBet, onSetResult, activeUser, isC
           {/* Home Team */}
           <div className="flex items-center flex-1 justify-start min-w-0">
             <TeamSwatch team={match.home} side="left" />
-            <h3 className="text-lg md:text-3xl font-serif font-bold text-paper leading-none mt-[2px] truncate tracking-tight">
+            <h3 className="text-base md:text-2xl font-serif font-bold text-paper leading-none mt-[2px] tracking-tight">
               {match.home}
             </h3>
           </div>
@@ -116,7 +116,7 @@ export const MatchCard = ({ match, userBets, onBet, onSetResult, activeUser, isC
 
           {/* Away Team */}
           <div className="flex items-center flex-1 justify-end min-w-0">
-            <h3 className="text-lg md:text-3xl font-serif font-bold text-paper leading-none mt-[2px] text-right truncate tracking-tight">
+            <h3 className="text-base md:text-2xl font-serif font-bold text-paper leading-none mt-[2px] text-right tracking-tight">
               {match.away}
             </h3>
             <TeamSwatch team={match.away} side="right" />
