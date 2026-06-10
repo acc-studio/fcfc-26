@@ -2,50 +2,43 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
-import { Player } from '@/lib/data';
+import { ARBITER_CODE } from '@/lib/data';
 
-interface AuthModalProps {
+interface ArbiterModalProps {
   isOpen: boolean;
-  targetUser: Player | null;
   onClose: () => void;
-  onSuccess: (user: Player) => void;
+  onSuccess: () => void;
 }
 
-export const AuthModal = ({ isOpen, targetUser, onClose, onSuccess }: AuthModalProps) => {
+export const ArbiterModal = ({ isOpen, onClose, onSuccess }: ArbiterModalProps) => {
   const [input, setInput] = useState('');
   const [error, setError] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Focus input when modal opens
   useEffect(() => {
-    if (isOpen && inputRef.current) {
+    if (isOpen) {
       setInput('');
       setError(false);
-      // Small timeout ensures the keyboard pops up on mobile
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [isOpen]);
 
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!targetUser) return;
-
-    // Case insensitive check
-    if (input.toUpperCase() === targetUser.pin.toUpperCase()) {
-      onSuccess(targetUser);
+    if (input === ARBITER_CODE) {
+      onSuccess();
       onClose();
     } else {
       setError(true);
-      setInput(''); // Clear input on fail
+      setInput('');
     }
   };
 
   return (
     <AnimatePresence>
-      {isOpen && targetUser && (
+      {isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
-          {/* Backdrop */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -53,57 +46,55 @@ export const AuthModal = ({ isOpen, targetUser, onClose, onSuccess }: AuthModalP
             className="absolute inset-0 bg-pitch-900/90 backdrop-blur-sm"
           />
 
-          {/* Modal Content */}
-          <motion.div 
+          <motion.div
             initial={{ scale: 0.95, opacity: 0, y: 10 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.95, opacity: 0, y: 10 }}
-            className="relative w-full max-w-xs bg-pitch-800 border border-gold/30 p-8 rounded-xl shadow-2xl"
+            className="relative w-full max-w-xs bg-pitch-800 border border-signal/40 p-8 rounded-xl shadow-2xl"
           >
             <div className="flex flex-col items-center gap-6">
               <div className="text-center">
-                <div className="text-4xl mb-2">{targetUser.avatar}</div>
-                <h3 className="font-serif text-2xl text-paper">Identity Check</h3>
-                <p className="font-mono text-[10px] uppercase text-gold tracking-widest mt-1">
-                  Enter PIN for {targetUser.name}
+                <div className="text-4xl mb-2">⚖️</div>
+                <h3 className="font-serif text-2xl text-paper">Arbiter Access</h3>
+                <p className="font-mono text-[10px] uppercase text-signal tracking-widest mt-1">
+                  Enter arbiter code
                 </p>
               </div>
 
               <form onSubmit={handleSubmit} className="w-full">
                 <input
                   ref={inputRef}
-                  type="text"                 // Changed from 'tel' to 'text'
-                  inputMode="text"            // Explicitly requesting text keyboard
-                  autoCapitalize="characters" // Forces uppercase keyboard on mobile
+                  type="text"
+                  inputMode="numeric"
                   autoComplete="off"
                   autoCorrect="off"
-                  maxLength={4}
+                  maxLength={6}
                   value={input}
                   onChange={(e) => {
                     setError(false);
-                    setInput(e.target.value.toUpperCase()); // Force visual uppercase
+                    setInput(e.target.value);
                   }}
                   className={clsx(
-                    "w-full bg-pitch-900 border-b-2 text-center font-mono text-3xl tracking-[0.5em] py-4 text-paper focus:outline-none transition-colors",
-                    error ? "border-signal text-signal placeholder:text-signal/50" : "border-chalk focus:border-gold"
+                    "w-full bg-pitch-900 border-b-2 text-center font-mono text-3xl tracking-[0.4em] py-4 text-paper focus:outline-none transition-colors",
+                    error ? "border-signal text-signal" : "border-chalk focus:border-signal"
                   )}
-                  placeholder="...."
+                  placeholder="······"
                 />
               </form>
 
               {error && (
-                <motion.p 
-                  initial={{ opacity: 0, y: -5 }} 
+                <motion.p
+                  initial={{ opacity: 0, y: -5 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="text-signal font-mono text-[10px] uppercase tracking-widest"
                 >
-                  Access Denied
+                  Wrong code
                 </motion.p>
               )}
 
-              <button 
+              <button
                 onClick={onClose}
-                className="text-paper/30 hover:text-paper font-mono text-xs uppercase tracking-widest mt-2"
+                className="text-paper/30 hover:text-paper font-mono text-xs uppercase tracking-widest"
               >
                 Cancel
               </button>

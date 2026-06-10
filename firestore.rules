@@ -1,0 +1,32 @@
+rules_version = '2';
+
+// FCFC '26 has no real authentication — players "log in" with a shared 4-char
+// code checked client-side. So Firestore can't verify *who* is writing; these
+// rules just constrain *what* and *where*, which is enough for a private
+// 6-friend game where the URL isn't shared publicly.
+//
+// Paste this into Firebase console -> Firestore Database -> Rules -> Publish.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Self-registered roster. Open read/write — PINs are stored plaintext and
+    // readable, which is the app's (intentional) security level.
+    match /players/{playerId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Anyone can read fixtures; writes (results) happen via the app's
+    // commissioner mode. Open writes — acceptable for a private pool.
+    match /matches/{matchId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Bets: open read (the leaderboard shows everyone) and write.
+    match /bets/{betId} {
+      allow read: if true;
+      allow write: if true;
+    }
+  }
+}

@@ -10,57 +10,93 @@ export interface Match {
   result_away?: number;
 }
 
+// Players self-register; the roster lives in the Firestore `players` collection,
+// not in code. `pin` is a 4-char login code (stored plaintext — this is a
+// private game, not real security; anyone with DB access can read it).
 export interface Player {
   id: string;
   name: string;
   avatar: string;
-  code: string;
+  pin: string;
 }
 
-// Your Custom Players (PRESERVED)
-export const PLAYERS = [
-  { id: 'p1', name: 'Özmerç', avatar: '😼', code: '1hj8' },
-  { id: 'p2', name: 'Eren', avatar: '🤡', code: 'qw89' },
-  { id: 'p3', name: 'Melih', avatar: '🥴', code: 'rt74' },
-  { id: 'p4', name: 'Kaan', avatar: '😏', code: 'y674' },
-  { id: 'p5', name: 'Memih', avatar: '🤠', code: 'as56' },
-  { id: 'p6', name: 'Aziz Cem', avatar: '🫠', code: 'jh67' },
-];
+// Quick-pick avatar suggestions when creating a profile; the register modal
+// also lets users type any emoji of their own.
+export const AVATARS = ['😼', '🤡', '🥴', '😏', '🤠', '🫠', '🐐', '🦂', '👹', '🤖', '👽', '🦅'];
 
-// Map Country Name -> ISO Code for FlagCDN
-// Note: England/Scotland use special GB subdivision codes
+// Code to unlock arbiter (result-entry) mode.
+export const ARBITER_CODE = '317098';
+
+// Players can only bet on matches kicking off within this window.
+export const BET_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+const MONTH_INDEX: Record<string, number> = {
+  Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+  Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
+};
+
+// Kickoff as a UTC epoch (ms). Match date/time are stored as Turkey time
+// (UTC+3) strings like "Jun 12" / "05:00", all in 2026.
+export function kickoffMs(m: Match): number {
+  const [mon, day] = m.date.split(' ');
+  const [hh, mm] = m.time.split(':').map(Number);
+  return Date.UTC(2026, MONTH_INDEX[mon] ?? 0, Number(day), hh - 3, mm);
+}
+
+export type BetOutcome = 'perfect' | 'win' | 'loss' | 'none';
+
+// Same rules as the leaderboard: exact score = perfect (3 pts), correct
+// winner/draw = win (1 pt), otherwise loss.
+export function betOutcome(
+  bet: { home: number; away: number } | undefined,
+  resultHome?: number,
+  resultAway?: number,
+): BetOutcome {
+  if (!bet || resultHome === undefined || resultAway === undefined) return 'none';
+  if (bet.home === resultHome && bet.away === resultAway) return 'perfect';
+  if (Math.sign(resultHome - resultAway) === Math.sign(bet.home - bet.away)) return 'win';
+  return 'loss';
+}
+
+// Map Country Name -> ISO Code for FlagCDN.
+// Keys MUST match the team names used in the fixtures seed (scripts/seed.mjs)
+// exactly, otherwise the flag falls back to a "?" swatch.
+// Note: England/Scotland use special GB subdivision codes.
+// Covers all 48 teams of the 2026 World Cup (final draw, Dec 5 2025).
 export const TEAM_ISO: Record<string, string> = {
-  // Co-hosts
+  // Hosts
   "Canada": "ca",
   "Mexico": "mx",
   "USA": "us",
-  
+
   // AFC
   "Australia": "au",
-  "IR Iran": "ir",
+  "Iran": "ir",
+  "Iraq": "iq",
   "Japan": "jp",
   "Jordan": "jo",
-  "Korea Republic": "kr",
+  "South Korea": "kr",
   "Qatar": "qa",
   "Saudi Arabia": "sa",
   "Uzbekistan": "uz",
-  
+
   // CAF
   "Algeria": "dz",
-  "Cabo Verde": "cv",
-  "Côte d'Ivoire": "ci",
+  "Cape Verde": "cv",
+  "Ivory Coast": "ci",
+  "DR Congo": "cd",
   "Egypt": "eg",
   "Ghana": "gh",
   "Morocco": "ma",
   "Senegal": "sn",
   "South Africa": "za",
   "Tunisia": "tn",
-  
+
   // Concacaf
   "Curaçao": "cw",
   "Haiti": "ht",
   "Panama": "pa",
-  
+
   // CONMEBOL
   "Argentina": "ar",
   "Brazil": "br",
@@ -68,14 +104,16 @@ export const TEAM_ISO: Record<string, string> = {
   "Ecuador": "ec",
   "Paraguay": "py",
   "Uruguay": "uy",
-  
+
   // OFC
   "New Zealand": "nz",
-  
+
   // UEFA
   "Austria": "at",
   "Belgium": "be",
+  "Bosnia and Herzegovina": "ba",
   "Croatia": "hr",
+  "Czechia": "cz",
   "England": "gb-eng", // Special code
   "France": "fr",
   "Germany": "de",
@@ -84,8 +122,7 @@ export const TEAM_ISO: Record<string, string> = {
   "Portugal": "pt",
   "Scotland": "gb-sct", // Special code
   "Spain": "es",
+  "Sweden": "se",
   "Switzerland": "ch",
-  
-  // Fallbacks
-  "Italy": "it",
+  "Türkiye": "tr",
 };

@@ -3,22 +3,26 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
 import { ScoreDial } from './ScoreDial';
-import { Match, TEAM_ISO } from '@/lib/data';
+import { Match, TEAM_ISO, betOutcome } from '@/lib/data';
 
 interface MatchCardProps {
   match: Match;
   userBets: any;
   onBet: (matchId: number, score: { home: number, away: number }) => void;
   onSetResult: (matchId: number, score: { home: number, away: number }) => void;
+  onReopen: (matchId: number) => void;
   activeUser: string;
-  isCommissioner: boolean;
+  isArbiter: boolean;
+  // Kicked off (or past) but not yet finalized — betting is closed.
+  locked?: boolean;
+  // Future fixture outside the 48h window — betting hasn't opened yet.
+  notYetOpen?: boolean;
 }
 
-// NEW SWATCH COMPONENT (Using Real Images via CDN)
+// Flag swatch via flagcdn (real images).
 const TeamSwatch = ({ team, side }: { team: string, side: 'left' | 'right' }) => {
   const code = TEAM_ISO[team];
 
-  // Fallback for missing codes
   if (!code) {
     return (
       <div className={clsx(
@@ -33,7 +37,7 @@ const TeamSwatch = ({ team, side }: { team: string, side: 'left' | 'right' }) =>
   return (
     <div className={clsx(
       "flex-shrink-0 relative flex items-center justify-center filter drop-shadow-sm",
-      "w-6 h-4 md:w-9 md:h-6", // Fixed aspect ratio for flags
+      "w-6 h-4 md:w-9 md:h-6",
       side === 'left' ? "mr-3 md:mr-5" : "ml-3 md:ml-5"
     )}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -47,13 +51,31 @@ const TeamSwatch = ({ team, side }: { team: string, side: 'left' | 'right' }) =>
   );
 };
 
-export const MatchCard = ({ match, userBets, onBet, onSetResult, activeUser, isCommissioner }: MatchCardProps) => {
+const OUTCOME_STYLES: Record<string, string> = {
+  perfect: "bg-gold/20 text-gold border-gold/50",
+  win: "bg-green-500/15 text-green-400 border-green-500/50",
+  loss: "bg-red-500/15 text-red-400 border-red-500/50",
+};
+const OUTCOME_LABEL: Record<string, string> = {
+  perfect: "Perfect",
+  win: "Won",
+  loss: "Lost",
+};
+
+export const MatchCard = ({ match, userBets, onBet, onSetResult, onReopen, activeUser, isArbiter, locked = false, notYetOpen = false }: MatchCardProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [adminScore, setAdminScore] = useState({ home: 0, away: 0 });
 
   const betKey = `${activeUser}_${match.id}`;
+  const hasBet = !!userBets[betKey];
   const currentBet = userBets[betKey] || { home: 0, away: 0 };
   const isFinished = match.status === 'FINISHED';
+  const canBet = !isArbiter && !isFinished && !locked && !notYetOpen;
+  // Arbiter result-entry is irrelevant for matches that haven't happened.
+  const showArbiter = isArbiter && !notYetOpen;
+  const outcome = isFinished
+    ? betOutcome(hasBet ? currentBet : undefined, match.result_home, match.result_away)
+    : 'none';
 
   useEffect(() => {
     if (match.result_home !== undefined && match.result_away !== undefined) {
@@ -69,7 +91,36 @@ export const MatchCard = ({ match, userBets, onBet, onSetResult, activeUser, isC
     setAdminScore(prev => ({ ...prev, [side]: val }));
   };
 
-  const CARD_BG_COLOR = isCommissioner ? "bg-[#2A1A1A]" : "bg-[#1A2621]";
+  const CARD_BG_COLOR = showArbiter ? "bg-[#2A1A1A]" : "bg-[#1A2621]";
+
+  // The pick strip shown under the teams (player's prediction + outcome).
+  const renderPick = () => {
+    if (showArbiter) return null;
+
+    if (isFinished) {
+      if (!hasBet) {
+        return <span className="font-mono text-[9px] uppercase tracking-widest text-paper/30">No bet placed</span>;
+      }
+      return (
+        <span className={clsx(
+          "font-mono text-[10px] uppercase tracking-widest px-2.5 py-1 rounded border",
+          OUTCOME_STYLES[outcome]
+        )}>
+          {OUTCOME_LABEL[outcome]} · {currentBet.home}–{currentBet.away}
+        </span>
+      );
+    }
+
+    if (hasBet) {
+      return (
+        <span className="font-mono text-[10px] uppercase tracking-widest px-2.5 py-1 rounded border border-gold/40 text-gold/80 bg-gold/5">
+          Your pick · {currentBet.home}–{currentBet.away}
+        </span>
+      );
+    }
+
+    return null;
+  };
 
   return (
     <motion.div
@@ -80,15 +131,15 @@ export const MatchCard = ({ match, userBets, onBet, onSetResult, activeUser, isC
       <div className={clsx(
         "flex-1 rounded-l-xl border-y border-l transition-colors duration-300 relative overflow-hidden",
         CARD_BG_COLOR,
-        isCommissioner ? "border-signal/30" :
+        showArbiter ? "border-signal/30" :
           isExpanded ? "border-gold/40" : "border-white/5"
       )}>
 
         {/* Metadata Header */}
         <div className="px-4 pt-5 pb-1 md:px-8 md:pt-7 md:pb-2 flex justify-between items-start font-mono text-[9px] md:text-[10px] uppercase tracking-widest text-paper/40">
           <span className="whitespace-nowrap">{match.date} — {match.time}</span>
-          <span className={clsx("text-right ml-2", isCommissioner ? "text-signal font-bold" : "")}>
-            {isCommissioner ? "ADMIN" : match.stadium}
+          <span className={clsx("text-right ml-2", showArbiter ? "text-signal font-bold" : "")}>
+            {showArbiter ? "ARBITER" : (locked && !isFinished ? "CLOSED" : match.stadium)}
           </span>
         </div>
 
@@ -123,17 +174,24 @@ export const MatchCard = ({ match, userBets, onBet, onSetResult, activeUser, isC
           </div>
         </div>
 
-        {/* Spacer */}
-        <div className="h-4 md:h-6" />
+        {/* Pick strip */}
+        {!showArbiter && (hasBet || isFinished) && (
+          <div className="px-4 pb-3 md:px-8 flex justify-center">
+            {renderPick()}
+          </div>
+        )}
 
-        {/* Betting Area */}
+        {/* Spacer */}
+        <div className="h-2 md:h-4" />
+
+        {/* Betting / Arbiter Area */}
         <motion.div
           initial={false}
-          animate={{ height: (isExpanded || isCommissioner) ? 'auto' : 0, opacity: (isExpanded || isCommissioner) ? 1 : 0 }}
+          animate={{ height: (isExpanded || showArbiter) ? 'auto' : 0, opacity: (isExpanded || showArbiter) ? 1 : 0 }}
           className="overflow-hidden border-t border-dashed border-white/10 bg-black/10"
         >
           <div className="p-4 md:p-8">
-            {isCommissioner ? (
+            {showArbiter ? (
               <div className="flex flex-col gap-4 md:gap-6">
                 <div className="flex justify-center gap-4 md:gap-10">
                   <ScoreDial label="Home" value={adminScore.home} onChange={(v) => handleAdminChange('home', v)} />
@@ -145,9 +203,17 @@ export const MatchCard = ({ match, userBets, onBet, onSetResult, activeUser, isC
                 >
                   {isFinished ? "Update" : "Finalize"}
                 </button>
+                {isFinished && (
+                  <button
+                    onClick={() => onReopen(match.id)}
+                    className="w-full py-2.5 md:py-3 border border-signal/40 text-signal/80 font-mono font-bold uppercase tracking-wider hover:bg-signal/10 hover:text-signal transition-colors rounded text-[10px] md:text-xs"
+                  >
+                    Reopen Match
+                  </button>
+                )}
               </div>
             ) : (
-              !isFinished && (
+              canBet && (
                 <div className="flex flex-col items-center gap-4 md:gap-6">
                   <div className="flex gap-6 md:gap-10">
                     <ScoreDial label={match.home} value={currentBet.home} onChange={(v) => handleBetChange('home', v)} />
@@ -173,20 +239,23 @@ export const MatchCard = ({ match, userBets, onBet, onSetResult, activeUser, isC
 
       {/* --- RIGHT SIDE: Stub --- */}
       <button
-        onClick={() => !isCommissioner && !isFinished && setIsExpanded(!isExpanded)}
-        disabled={isCommissioner || isFinished}
+        onClick={() => canBet && setIsExpanded(!isExpanded)}
+        disabled={!canBet}
         className={clsx(
-          "relative flex items-center justify-center cursor-pointer transition-colors duration-300",
+          "relative flex items-center justify-center transition-colors duration-300",
           "w-10 md:w-16",
           CARD_BG_COLOR,
-          !isCommissioner && !isFinished && "hover:brightness-110 active:brightness-125"
+          canBet ? "cursor-pointer hover:brightness-110 active:brightness-125" : "cursor-default"
         )}
         style={{
           clipPath: 'polygon(0 0, 100% 0, 100% 10%, 90% 15%, 100% 20%, 100% 30%, 90% 35%, 100% 40%, 100% 50%, 90% 55%, 100% 60%, 100% 70%, 90% 75%, 100% 80%, 100% 90%, 90% 95%, 100% 100%, 0 100%)'
         }}
       >
-        <div className="rotate-90 whitespace-nowrap font-mono text-[9px] md:text-[10px] uppercase tracking-[0.2em] text-gold/50">
-          {isFinished ? "FIN" : userBets[betKey] ? "EDIT" : "BET"}
+        <div className={clsx(
+          "rotate-90 whitespace-nowrap font-mono text-[9px] md:text-[10px] uppercase tracking-[0.2em]",
+          (locked || notYetOpen) && !isFinished ? "text-paper/30" : "text-gold/50"
+        )}>
+          {isFinished ? "FIN" : notYetOpen ? "SOON" : locked ? "LOCK" : hasBet ? "EDIT" : "BET"}
         </div>
       </button>
     </motion.div>
