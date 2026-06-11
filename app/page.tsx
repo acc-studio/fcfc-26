@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
-import { Match, Player, kickoffMs, BET_WINDOW_MS } from '@/lib/data';
+import { Match, Player, Pick, kickoffMs, BET_WINDOW_MS } from '@/lib/data';
 import { MatchCard } from '@/components/MatchCard';
 import { Leaderboard } from '@/components/Leaderboard';
 import { db } from '@/lib/firebase';
@@ -47,7 +47,8 @@ export default function WorldCupApp() {
       const betMap: Record<string, any> = {};
       snap.docs.forEach((d) => {
         const row = d.data() as any;
-        betMap[d.id] = { home: row.home, away: row.away };
+        if (!row.pick) return; // ignore legacy score-based bets
+        betMap[d.id] = { pick: row.pick, locked: !!row.locked, user_id: row.user_id, match_id: row.match_id };
       });
       setBets(betMap);
     });
@@ -68,6 +69,15 @@ export default function WorldCupApp() {
       clearInterval(tick);
     };
   }, []);
+
+  // A session restored from localStorage whose profile no longer exists in the
+  // roster is treated as logged out — it must never act as a logged-in user.
+  useEffect(() => {
+    if (currentUser && players.length > 0 && !players.some(p => p.id === currentUser)) {
+      setCurrentUser(null);
+      localStorage.removeItem('pitch_club_user');
+    }
+  }, [currentUser, players]);
 
   // Up Next = bettable window: not finalized and kicking off within 48h (plus
   // any already-kicked-off matches still awaiting a result), soonest first.
@@ -102,15 +112,20 @@ export default function WorldCupApp() {
     localStorage.setItem('pitch_club_user', id);
   };
 
-  const handleBet = async (matchId: number, score: { home: number, away: number }) => {
+  const handlePick = async (matchId: number, pick: Pick) => {
     if (!currentUser) return;
-    setBets(prev => ({ ...prev, [`${currentUser}_${matchId}`]: score }));
-    await setDoc(doc(db, 'bets', `${currentUser}_${matchId}`), {
-      user_id: currentUser,
-      match_id: matchId,
-      home: score.home,
-      away: score.away,
-    });
+    const key = `${currentUser}_${matchId}`;
+    if (bets[key]?.locked) return; // can't change a locked-in bet
+    setBets(prev => ({ ...prev, [key]: { pick, locked: false, user_id: currentUser, match_id: matchId } }));
+    await setDoc(doc(db, 'bets', key), { user_id: currentUser, match_id: matchId, pick, locked: false });
+  };
+
+  const handleLockIn = async (matchId: number) => {
+    if (!currentUser) return;
+    const key = `${currentUser}_${matchId}`;
+    if (!bets[key]?.pick) return;
+    setBets(prev => ({ ...prev, [key]: { ...prev[key], locked: true } }));
+    await updateDoc(doc(db, 'bets', key), { locked: true });
   };
 
   const handleSetResult = async (matchId: number, score: { home: number, away: number }) => {
@@ -143,6 +158,11 @@ export default function WorldCupApp() {
   const handleAuthSuccess = (player: Player) => {
     setCurrentUser(player.id);
     localStorage.setItem('pitch_club_user', player.id);
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('pitch_club_user');
   };
 
   return (
@@ -200,20 +220,36 @@ export default function WorldCupApp() {
             </button>
           </div>
           <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-            {players.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => handleUserClick(p)}
-                className={clsx(
-                  "px-4 py-2 rounded-full border text-xs font-mono transition-all whitespace-nowrap flex items-center gap-2",
-                  currentUser === p.id
-                    ? "bg-paper text-pitch-900 border-paper font-bold"
-                    : "border-chalk text-paper/60 hover:border-gold/50"
-                )}
-              >
-                <span>{p.avatar}</span> {p.name}
-              </button>
-            ))}
+            {players.map((p) => {
+              const active = currentUser === p.id;
+              return (
+                <div
+                  key={p.id}
+                  className={clsx(
+                    "flex items-center rounded-full border text-xs font-mono transition-all whitespace-nowrap shrink-0",
+                    active ? "bg-paper text-pitch-900 border-paper font-bold" : "border-chalk text-paper/60 hover:border-gold/50"
+                  )}
+                >
+                  <button
+                    onClick={() => handleUserClick(p)}
+                    disabled={active}
+                    className={clsx("flex items-center gap-2 py-2 pl-4", active ? "pr-2 cursor-default" : "pr-4")}
+                  >
+                    <span>{p.avatar}</span> {p.name}
+                  </button>
+                  {active && (
+                    <button
+                      onClick={handleLogout}
+                      aria-label="Log out"
+                      title="Log out"
+                      className="pr-3 pl-1 py-2 text-pitch-900/50 hover:text-pitch-900 transition-colors"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              );
+            })}
             <button
               onClick={() => setRegisterOpen(true)}
               className="px-4 py-2 rounded-full border border-dashed border-gold/40 text-xs font-mono text-gold/70 hover:border-gold hover:text-gold transition-all whitespace-nowrap"
@@ -252,7 +288,9 @@ export default function WorldCupApp() {
                       key={match.id}
                       match={match}
                       userBets={bets}
-                      onBet={handleBet}
+                      players={players}
+                      onPick={handlePick}
+                      onLockIn={handleLockIn}
                       onSetResult={handleSetResult}
                       onReopen={handleReopenResult}
                       activeUser={currentUser || ''}
@@ -283,7 +321,9 @@ export default function WorldCupApp() {
                       key={match.id}
                       match={match}
                       userBets={bets}
-                      onBet={handleBet}
+                      players={players}
+                      onPick={handlePick}
+                      onLockIn={handleLockIn}
                       onSetResult={handleSetResult}
                       onReopen={handleReopenResult}
                       activeUser={currentUser || ''}
@@ -314,7 +354,9 @@ export default function WorldCupApp() {
                       key={match.id}
                       match={match}
                       userBets={bets}
-                      onBet={handleBet}
+                      players={players}
+                      onPick={handlePick}
+                      onLockIn={handleLockIn}
                       onSetResult={handleSetResult}
                       onReopen={handleReopenResult}
                       activeUser={currentUser || ''}

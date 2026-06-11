@@ -89,6 +89,13 @@ export const AuthModal = ({ isOpen, targetUser, onClose, onSuccess }: AuthModalP
                   )}
                   placeholder="...."
                 />
+                <button
+                  type="submit"
+                  disabled={input.length !== 4}
+                  className="w-full mt-6 py-3 bg-gold text-pitch-900 font-mono font-bold uppercase tracking-wider hover:bg-paper transition-colors rounded text-xs disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Log In
+                </button>
               </form>
 
               {error && (

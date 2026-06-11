@@ -43,19 +43,30 @@ export function kickoffMs(m: Match): number {
   return Date.UTC(2026, MONTH_INDEX[mon] ?? 0, Number(day), hh - 3, mm);
 }
 
-export type BetOutcome = 'perfect' | 'win' | 'loss' | 'none';
+// Outcome-only betting: a player picks the home win, away win, or a draw.
+export type Pick = 'HOME' | 'DRAW' | 'AWAY';
+export type BetOutcome = 'win' | 'loss' | 'none';
 
-// Same rules as the leaderboard: exact score = perfect (3 pts), correct
-// winner/draw = win (1 pt), otherwise loss.
-export function betOutcome(
-  bet: { home: number; away: number } | undefined,
-  resultHome?: number,
-  resultAway?: number,
-): BetOutcome {
-  if (!bet || resultHome === undefined || resultAway === undefined) return 'none';
-  if (bet.home === resultHome && bet.away === resultAway) return 'perfect';
-  if (Math.sign(resultHome - resultAway) === Math.sign(bet.home - bet.away)) return 'win';
-  return 'loss';
+export interface Bet {
+  user_id: string;
+  match_id: number;
+  pick: Pick;
+  locked: boolean;
+}
+
+// The actual match result expressed as an outcome (null until finalized).
+export function resultOutcome(resultHome?: number, resultAway?: number): Pick | null {
+  if (resultHome === undefined || resultAway === undefined) return null;
+  if (resultHome > resultAway) return 'HOME';
+  if (resultHome < resultAway) return 'AWAY';
+  return 'DRAW';
+}
+
+// Correct pick = win (1 pt), otherwise loss. No exact-score tier.
+export function betOutcome(pick: Pick | undefined, resultHome?: number, resultAway?: number): BetOutcome {
+  const actual = resultOutcome(resultHome, resultAway);
+  if (!pick || !actual) return 'none';
+  return pick === actual ? 'win' : 'loss';
 }
 
 // Map Country Name -> ISO Code for FlagCDN.
