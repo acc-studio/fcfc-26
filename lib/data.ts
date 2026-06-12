@@ -1,3 +1,13 @@
+// A notable in-match event (goal / card), supplied by the live results poller
+// (scripts/poll.mjs from the ESPN feed). `team` is relative to THIS match's
+// home/away, not the feed's. Display-only — scoring never depends on it.
+export interface MatchEvent {
+  minute: string;                 // e.g. "40'", "90+2'"
+  player: string;
+  team: 'HOME' | 'AWAY';
+  kind: 'goal' | 'own-goal' | 'penalty' | 'red';
+}
+
 export interface Match {
   id: number;
   home: string;
@@ -8,6 +18,10 @@ export interface Match {
   status: 'UPCOMING' | 'LIVE' | 'FINISHED';
   result_home?: number;
   result_away?: number;
+  // Populated while LIVE (cleared on finalize): the running clock label.
+  minute?: string;
+  // Goals + red cards in chronological order (LIVE and FINISHED).
+  events?: MatchEvent[];
 }
 
 // Players self-register; the roster lives in the Firestore `players` collection,
@@ -24,8 +38,10 @@ export interface Player {
 // also lets users type any emoji of their own.
 export const AVATARS = ['😼', '🤡', '🥴', '😏', '🤠', '🫠', '🐐', '🦂', '👹', '🤖', '👽', '🦅'];
 
-// Code to unlock arbiter (result-entry) mode.
-export const ARBITER_CODE = '317098';
+// The arbiter unlock code is no longer in the client. It lives in the
+// Firestore `config/arbiter` doc (never client-readable); ArbiterModal proves
+// knowledge of it by writing an `arbiters/{uid}` doc that the rules validate
+// server-side. See firestore.rules.
 
 // Players can only bet on matches kicking off within this window.
 export const BET_WINDOW_MS = 48 * 60 * 60 * 1000;

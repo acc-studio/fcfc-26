@@ -1,0 +1,49 @@
+name: Poll live results
+
+# Pulls the ESPN World Cup feed and writes live scores / scorers / final
+# results into Firestore (scripts/poll.mjs). The app streams them to clients
+# via its existing onSnapshot listeners.
+#
+# Setup: add these repo secrets (Settings -> Secrets and variables -> Actions),
+# the same values as .env.local:
+#   NEXT_PUBLIC_FIREBASE_API_KEY, NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+#   NEXT_PUBLIC_FIREBASE_PROJECT_ID, NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+#   NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID, NEXT_PUBLIC_FIREBASE_APP_ID
+# Plus ARBITER_CODE (the value in the config/arbiter doc) — the poller writes
+# results as a transient arbiter, which the tightened rules require.
+#
+# Cost note: */5 around the clock is ~8.6k runs/month. GitHub Actions minutes
+# are unlimited on public repos but capped (2,000/mo) on private ones — if this
+# repo is private, narrow the schedule to match days/hours or flip the repo
+# public. Disable the workflow once the tournament is over.
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}        # allow manual runs from the Actions tab
+
+# Never let two polls overlap; drop a queued run if one is in flight.
+concurrency:
+  group: poll-results
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: node scripts/poll.mjs
+        env:
+          NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+          NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
+          ARBITER_CODE: ${{ secrets.ARBITER_CODE }}

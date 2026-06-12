@@ -14,22 +14,11 @@
 // before writing, since that's what the players read. Times are display only;
 // betting does not depend on them.
 
-import { initializeApp } from 'firebase/app';
-import { getFirestore, writeBatch, doc } from 'firebase/firestore';
-
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-};
-
-if (!firebaseConfig.projectId) {
-  console.error('Missing Firebase config. Run with: node --env-file=.env.local scripts/seed.mjs');
-  process.exit(1);
-}
+// Writing matches now requires arbiter rights (see firestore.rules), so this
+// connects as a transient arbiter — needs ARBITER_CODE alongside the Firebase
+// config in .env.local.
+import { writeBatch, doc } from 'firebase/firestore';
+import { connectAsArbiter } from './connect.mjs';
 
 // [id, home, away, date, time(ET), stadium, city]
 const FIXTURES = [
@@ -127,8 +116,7 @@ function toTurkey(date, time) {
 }
 
 async function main() {
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
+  const { db, cleanup } = await connectAsArbiter();
 
   const batch = writeBatch(db);
   for (const [id, home, away, date, time, stadium, city] of FIXTURES) {
@@ -145,6 +133,7 @@ async function main() {
   }
   await batch.commit();
   console.log(`Seeded ${FIXTURES.length} matches into Firestore (Turkey time).`);
+  await cleanup();
   process.exit(0);
 }
 

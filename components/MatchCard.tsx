@@ -3,7 +3,13 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
 import { ScoreDial } from './ScoreDial';
-import { Match, Player, Pick, TEAM_ISO, betOutcome } from '@/lib/data';
+import { Match, Player, Pick, MatchEvent, TEAM_ISO, betOutcome } from '@/lib/data';
+
+// Glyph for a live/finished match event (goals + red cards from the poller).
+const EVENT_ICON: Record<MatchEvent['kind'], string> = {
+  goal: '⚽', penalty: '⚽', 'own-goal': '⚽', red: '🟥',
+};
+const eventSuffix = (k: MatchEvent['kind']) => k === 'own-goal' ? ' (OG)' : k === 'penalty' ? ' (P)' : '';
 
 interface MatchCardProps {
   match: Match;
@@ -49,6 +55,7 @@ export const MatchCard = ({
   const myBet = userBets[betKey];
   const myPick: Pick | undefined = myBet?.pick;
   const isFinished = match.status === 'FINISHED';
+  const isLive = match.status === 'LIVE';
   const showArbiter = isArbiter && !notYetOpen;
   // Player can still choose/change a pick: logged in, in the bettable window,
   // and hasn't manually locked it yet.
@@ -106,8 +113,12 @@ export const MatchCard = ({
         {/* Metadata Header */}
         <div className="px-4 pt-5 pb-1 md:px-8 md:pt-7 md:pb-2 flex justify-between items-start font-mono text-[9px] md:text-[10px] uppercase tracking-widest text-paper/40">
           <span className="whitespace-nowrap">{match.date} — {match.time}</span>
-          <span className={clsx("text-right ml-2", showArbiter ? "text-signal font-bold" : "")}>
-            {showArbiter ? "ARBITER" : (locked && !isFinished ? "CLOSED" : match.stadium)}
+          <span className={clsx("text-right ml-2", (showArbiter || isLive) ? "text-signal font-bold" : "")}>
+            {showArbiter ? "ARBITER" : isLive ? (
+              <span className="inline-flex items-center gap-1">
+                <span className="animate-pulse">●</span> LIVE{match.minute ? ` · ${match.minute}` : ''}
+              </span>
+            ) : (locked && !isFinished ? "CLOSED" : match.stadium)}
           </span>
         </div>
 
@@ -133,9 +144,12 @@ export const MatchCard = ({
 
           {/* Center: result, or Draw chip */}
           <div className="flex flex-col items-center px-1 shrink-0">
-            {isFinished ? (
-              <div className="font-mono font-bold text-lg md:text-2xl text-paper tracking-tighter">
-                {match.result_home}-{match.result_away}
+            {(isFinished || isLive) ? (
+              <div className={clsx(
+                "font-mono font-bold text-lg md:text-2xl tracking-tighter",
+                isLive ? "text-signal" : "text-paper"
+              )}>
+                {match.result_home ?? 0}-{match.result_away ?? 0}
               </div>
             ) : (
               <button
@@ -168,6 +182,25 @@ export const MatchCard = ({
             <Flag team={match.away} className="flex-shrink-0 w-6 h-4 md:w-9 md:h-6 ml-2 md:ml-3" />
           </button>
         </div>
+
+        {/* Goalscorers / red cards (live + finished) */}
+        {match.events && match.events.length > 0 && (
+          <div className="px-4 md:px-8 pb-3 -mt-1 flex flex-col gap-1 relative z-10">
+            {match.events.map((ev, i) => (
+              <div
+                key={i}
+                className={clsx(
+                  "flex items-center gap-1.5 font-mono text-[10px] md:text-[11px] text-paper/70 min-w-0",
+                  ev.team === 'AWAY' ? "flex-row-reverse text-right" : "text-left"
+                )}
+              >
+                <span className="text-paper/40 tabular-nums shrink-0">{ev.minute}</span>
+                <span className="shrink-0">{EVENT_ICON[ev.kind]}</span>
+                <span className="truncate">{ev.player}{eventSuffix(ev.kind)}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Action area */}
         {showArbiter ? (
@@ -273,9 +306,9 @@ export const MatchCard = ({
       >
         <div className={clsx(
           "rotate-90 whitespace-nowrap font-mono text-[9px] md:text-[10px] uppercase tracking-[0.2em]",
-          isFinished ? "text-paper/40" : (locked || notYetOpen || myBet?.locked) ? "text-paper/30" : "text-gold/50"
+          isFinished ? "text-paper/40" : isLive ? "text-signal font-bold" : (locked || notYetOpen || myBet?.locked) ? "text-paper/30" : "text-gold/50"
         )}>
-          {isFinished ? "FIN" : notYetOpen ? "SOON" : (myBet?.locked || locked) ? "LOCKED" : myPick ? "PICK" : "BET"}
+          {isFinished ? "FIN" : isLive ? "LIVE" : notYetOpen ? "SOON" : (myBet?.locked || locked) ? "LOCKED" : myPick ? "PICK" : "BET"}
         </div>
       </div>
     </motion.div>

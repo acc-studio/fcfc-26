@@ -5,8 +5,8 @@ import clsx from 'clsx';
 import { Match, Player, Pick, kickoffMs, BET_WINDOW_MS } from '@/lib/data';
 import { MatchCard } from '@/components/MatchCard';
 import { Leaderboard } from '@/components/Leaderboard';
-import { db } from '@/lib/firebase';
-import { collection, doc, onSnapshot, setDoc, updateDoc, deleteField } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
+import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { AuthModal } from '@/components/AuthModal';
 import { RegisterModal } from '@/components/RegisterModal';
 import { ArbiterModal } from '@/components/ArbiterModal';
@@ -33,6 +33,9 @@ export default function WorldCupApp() {
   useEffect(() => {
     const lastUser = localStorage.getItem('pitch_club_user');
     if (lastUser) setCurrentUser(lastUser);
+    // Arbiter status persists per device (the anon uid + arbiters/{uid} doc do
+    // too). The flag is just UI — the rules still enforce real authorization.
+    if (localStorage.getItem('pitch_arbiter') === '1') setIsArbiter(true);
 
     // Live matches: sorted by id so fixtures stay in schedule order.
     const unsubMatches = onSnapshot(collection(db, 'matches'), (snap) => {
@@ -165,6 +168,22 @@ export default function WorldCupApp() {
     localStorage.removeItem('pitch_club_user');
   };
 
+  const handleArbiterSuccess = () => {
+    setIsArbiter(true);
+    localStorage.setItem('pitch_arbiter', '1');
+  };
+
+  // Stepping down also removes this device's arbiters/{uid} doc, so it loses
+  // result-writing authorization at the rules level (not just in the UI).
+  const handleExitArbiter = async () => {
+    setIsArbiter(false);
+    localStorage.removeItem('pitch_arbiter');
+    const uid = auth.currentUser?.uid;
+    if (uid) {
+      try { await deleteDoc(doc(db, 'arbiters', uid)); } catch { /* already gone */ }
+    }
+  };
+
   return (
     <div className="min-h-screen bg-pitch-900 transition-all duration-700">
 
@@ -185,7 +204,7 @@ export default function WorldCupApp() {
       <ArbiterModal
         isOpen={arbiterModalOpen}
         onClose={() => setArbiterModalOpen(false)}
-        onSuccess={() => setIsArbiter(true)}
+        onSuccess={handleArbiterSuccess}
       />
 
       {/* Inner Container for Content */}
@@ -210,7 +229,7 @@ export default function WorldCupApp() {
               Active Punter:
             </p>
             <button
-              onClick={() => isArbiter ? setIsArbiter(false) : setArbiterModalOpen(true)}
+              onClick={() => isArbiter ? handleExitArbiter() : setArbiterModalOpen(true)}
               className={clsx(
                 "text-[9px] uppercase tracking-widest font-mono px-2 py-1 rounded transition-colors",
                 isArbiter ? "bg-signal text-white" : "text-paper/10 hover:text-paper/30"

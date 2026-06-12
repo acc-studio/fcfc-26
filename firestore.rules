@@ -1,32 +1,75 @@
 rules_version = '2';
 
-// FCFC '26 has no real authentication — players "log in" with a shared 4-char
-// code checked client-side. So Firestore can't verify *who* is writing; these
-// rules just constrain *what* and *where*, which is enough for a private
-// 6-friend game where the URL isn't shared publicly.
+// FCFC '26 uses Firebase Anonymous Auth so these rules can tell callers apart.
+// Every client (and the results poller) silently signs in anonymously; that
+// gives each device a stable uid. There is still no "account" — player identity
+// is the self-registered roster doc, and PINs remain plaintext (intentional).
+// What these rules add: only an arbiter can change results, the arbiter code
+// lives server-side (never readable), and writes must be authed + well-shaped.
 //
-// Paste this into Firebase console -> Firestore Database -> Rules -> Publish.
+// Paste into Firebase console -> Firestore Database -> Rules -> Publish.
+// Prereqs: enable Anonymous sign-in (Authentication -> Sign-in method) and
+// create config/arbiter = { code: "<your code>" } BEFORE publishing this.
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Self-registered roster. Open read/write — PINs are stored plaintext and
-    // readable, which is the app's (intentional) security level.
-    match /players/{playerId} {
-      allow read: if true;
-      allow write: if true;
+    // A caller is an arbiter iff they hold an arbiters/<their-uid> doc. Rules
+    // run server-side, so this read works even though the collection is closed.
+    function isArbiter() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/arbiters/$(request.auth.uid));
     }
 
-    // Anyone can read fixtures; writes (results) happen via the app's
-    // commissioner mode. Open writes — acceptable for a private pool.
+    // The arbiter secret. Never readable or writable by clients — seed it from
+    // the Firebase console only. This is what keeps the code out of the bundle.
+    match /config/{doc} {
+      allow read, write: if false;
+    }
+
+    // Self-service elevation: a caller writes arbiters/<own-uid> with the code,
+    // and the rule validates it against the closed config doc server-side. Wrong
+    // code -> rejected. The collection is unreadable, so the code can't leak.
+    // Callers may remove their own doc to step down (used by the UI and the
+    // poller, which cleans itself up after each run).
+    match /arbiters/{uid} {
+      allow get, list: if false;
+      allow create, update: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.code
+             == get(/databases/$(database)/documents/config/arbiter).data.code;
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Fixtures: world-readable. Only an arbiter (a human in arbiter mode, or the
+    // poller) may create/change them; nobody deletes.
     match /matches/{matchId} {
       allow read: if true;
-      allow write: if true;
+      allow create, update: if isArbiter();
+      allow delete: if false;
     }
 
-    // Bets: open read (the leaderboard shows everyone) and write.
+    // Roster: anyone signed in may register/update a profile; require the full
+    // shape so a write can't drop fields or inject junk. No deletes from clients.
+    match /players/{playerId} {
+      allow read: if true;
+      allow create, update: if request.auth != null
+        && request.resource.data.keys().hasAll(['id', 'name', 'avatar', 'pin'])
+        && request.resource.data.id is string
+        && request.resource.data.name is string && request.resource.data.name.size() <= 40
+        && request.resource.data.avatar is string && request.resource.data.avatar.size() <= 16
+        && request.resource.data.pin is string && request.resource.data.pin.size() <= 8;
+      allow delete: if isArbiter();
+    }
+
+    // Bets: world-readable (leaderboard + social reveal). Writes require auth and
+    // a valid outcome shape; deletes are arbiter-only (the wipe-bets script).
     match /bets/{betId} {
       allow read: if true;
-      allow write: if true;
+      allow create, update: if request.auth != null
+        && request.resource.data.pick in ['HOME', 'DRAW', 'AWAY']
+        && request.resource.data.locked is bool
+        && request.resource.data.user_id is string;
+      allow delete: if isArbiter();
     }
   }
 }

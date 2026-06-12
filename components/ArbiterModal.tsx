@@ -2,7 +2,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
-import { ARBITER_CODE } from '@/lib/data';
+import { doc, setDoc } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 
 interface ArbiterModalProps {
   isOpen: boolean;
@@ -13,24 +14,35 @@ interface ArbiterModalProps {
 export const ArbiterModal = ({ isOpen, onClose, onSuccess }: ArbiterModalProps) => {
   const [input, setInput] = useState('');
   const [error, setError] = useState(false);
+  const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
       setInput('');
       setError(false);
+      setBusy(false);
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [isOpen]);
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  // The code is never on the client. We prove we know it by writing
+  // arbiters/{uid}; the Firestore rule compares it to the closed config doc and
+  // rejects a wrong code (permission-denied), which we surface as "Wrong code".
+  const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (input === ARBITER_CODE) {
+    if (busy) return;
+    const uid = auth.currentUser?.uid;
+    if (!uid) { setError(true); return; }
+    setBusy(true);
+    try {
+      await setDoc(doc(db, 'arbiters', uid), { code: input });
       onSuccess();
       onClose();
-    } else {
+    } catch {
       setError(true);
       setInput('');
+      setBusy(false);
     }
   };
 
