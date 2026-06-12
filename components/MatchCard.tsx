@@ -122,13 +122,13 @@ export const MatchCard = ({
             disabled={!canPick}
             onClick={() => onPick(match.id, 'HOME')}
             className={clsx(
-              "flex items-center flex-1 justify-start min-w-0 rounded-lg border-2 px-2 py-1.5 transition-colors",
+              "flex items-center flex-1 justify-start min-w-0 rounded-lg border-2 px-2 py-1.5 transition-colors select-none touch-manipulation",
               pickClass('HOME'),
               canPick ? "cursor-pointer hover:border-gold/30" : "cursor-default"
             )}
           >
             <Flag team={match.home} className="flex-shrink-0 w-6 h-4 md:w-9 md:h-6 mr-2 md:mr-3" />
-            <h3 className="text-sm md:text-xl font-serif font-bold text-paper leading-tight tracking-tight text-left">{match.home}</h3>
+            <h3 className="min-w-0 text-sm md:text-xl font-serif font-bold text-paper leading-tight tracking-tight text-left">{match.home}</h3>
           </button>
 
           {/* Center: result, or Draw chip */}
@@ -143,7 +143,7 @@ export const MatchCard = ({
                 disabled={!canPick}
                 onClick={() => onPick(match.id, 'DRAW')}
                 className={clsx(
-                  "rounded-full border-2 px-3 py-1 font-mono text-[9px] md:text-[11px] uppercase tracking-widest transition-colors text-paper/80",
+                  "rounded-full border-2 px-3 py-1 font-mono text-[9px] md:text-[11px] uppercase tracking-widest transition-colors text-paper/80 select-none touch-manipulation",
                   pickClass('DRAW'),
                   canPick ? "cursor-pointer hover:border-gold/30" : "cursor-default"
                 )}
@@ -159,12 +159,12 @@ export const MatchCard = ({
             disabled={!canPick}
             onClick={() => onPick(match.id, 'AWAY')}
             className={clsx(
-              "flex items-center flex-1 justify-end min-w-0 rounded-lg border-2 px-2 py-1.5 transition-colors",
+              "flex items-center flex-1 justify-end min-w-0 rounded-lg border-2 px-2 py-1.5 transition-colors select-none touch-manipulation",
               pickClass('AWAY'),
               canPick ? "cursor-pointer hover:border-gold/30" : "cursor-default"
             )}
           >
-            <h3 className="text-sm md:text-xl font-serif font-bold text-paper leading-tight text-right tracking-tight">{match.away}</h3>
+            <h3 className="min-w-0 text-sm md:text-xl font-serif font-bold text-paper leading-tight text-right tracking-tight">{match.away}</h3>
             <Flag team={match.away} className="flex-shrink-0 w-6 h-4 md:w-9 md:h-6 ml-2 md:ml-3" />
           </button>
         </div>
