@@ -20,7 +20,13 @@
 import { collection, getDocs, doc, updateDoc, deleteField } from 'firebase/firestore';
 import { connectAsArbiter } from './connect.mjs';
 
-const ESPN_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
+// No arg -> today's scoreboard (the cron's normal mode). Pass a date to backfill
+// past games' scores/scorers, e.g. `node scripts/poll.mjs 20260611` or a range
+// `20260611-20260612` (ESPN uses YYYYMMDD). Finished games whose events were
+// never captured (e.g. finalized manually before the poller existed) get filled.
+const dateArg = process.argv[2];
+const ESPN_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard'
+  + (dateArg ? `?dates=${dateArg}` : '');
 
 // ESPN's display name -> our canonical team name (the names used in the seed /
 // TEAM_ISO). Only the ones that differ after normalization need an entry; the
