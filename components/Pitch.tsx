@@ -37,12 +37,14 @@ function buildRows(lineup: TeamLineup): { gk: LineupPlayer | null; rows: LineupP
 // y positions (% of pitch height) per team, GK nearest its own goal line. The
 // outfield spreads across most of each half so lines don't crowd vertically.
 function yFor(side: 'home' | 'away', rowIdx: number, rowCount: number): number {
-  const span = 33; // how far the outfield lines spread toward the centre
+  // Keep each team in its own half with a buffer around the centre line so the
+  // two front lines don't collide: home front ~57%, away front ~43%.
+  const span = 26; // how far the outfield lines spread toward the centre
   if (side === 'home') {
-    const near = 85, step = rowCount > 1 ? span / (rowCount - 1) : 0;
+    const near = 83, step = rowCount > 1 ? span / (rowCount - 1) : 0;
     return near - rowIdx * step;
   }
-  const near = 15, step = rowCount > 1 ? span / (rowCount - 1) : 0;
+  const near = 17, step = rowCount > 1 ? span / (rowCount - 1) : 0;
   return near + rowIdx * step;
 }
 

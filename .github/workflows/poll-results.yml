@@ -2,7 +2,8 @@ name: Poll live results
 
 # Pulls the ESPN World Cup feed and writes live scores / scorers / final
 # results into Firestore (scripts/poll.mjs). The app streams them to clients
-# via its existing onSnapshot listeners.
+# via its existing onSnapshot listeners. The same run also refreshes team form
+# (scripts/form.mjs) once an hour, so one external trigger keeps both current.
 #
 # Setup: add these repo secrets (Settings -> Secrets and variables -> Actions),
 # the same values as .env.local:
@@ -46,7 +47,15 @@ concurrency:
 jobs:
   poll:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
+    env:
+      NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+      NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
+      ARBITER_CODE: ${{ secrets.ARBITER_CODE }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -54,12 +63,16 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: node scripts/poll.mjs "${{ inputs.dates }}"
-        env:
-          NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
-          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
-          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
-          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
-          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
-          NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
-          ARBITER_CODE: ${{ secrets.ARBITER_CODE }}
+      - name: Poll live scores
+        run: node scripts/poll.mjs "${{ inputs.dates }}"
+      # Form changes rarely, so refresh it ~once an hour: this workflow fires
+      # every ~10 min (external trigger), and only the run landing in the first
+      # 10 minutes of the hour does the form pass.
+      - name: Refresh team form (hourly)
+        run: |
+          min=$(date -u +%M)
+          if (( 10#$min < 10 )); then
+            node scripts/form.mjs
+          else
+            echo "Skipping form refresh — not the top of the hour."
+          fi
