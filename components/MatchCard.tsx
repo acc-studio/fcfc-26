@@ -4,6 +4,7 @@ import { clsx } from 'clsx';
 import { ScoreDial } from './ScoreDial';
 import { Match, Player, Pick, MatchEvent, FormMatch, betOutcome } from '@/lib/data';
 import { Flag } from './Flag';
+import { FitText } from './FitText';
 import { LineupModal } from './LineupModal';
 
 // Glyph for a live/finished match event (goals + red cards from the poller).
@@ -175,7 +176,7 @@ export const MatchCard = ({
             )}
           >
             <Flag team={match.home} className="flex-shrink-0 w-6 h-4 md:w-9 md:h-6 mr-2 md:mr-3" />
-            <h3 className="min-w-0 break-words text-sm md:text-xl font-serif font-bold text-paper leading-tight tracking-tight text-left">{match.home}</h3>
+            <FitText text={match.home} align="left" className="text-sm md:text-xl font-serif font-bold text-paper leading-tight tracking-tight" />
           </button>
 
           {/* Center: result, or Draw chip */}
@@ -214,7 +215,7 @@ export const MatchCard = ({
               canPick ? "cursor-pointer hover:border-gold/30" : "cursor-default"
             )}
           >
-            <h3 className="min-w-0 break-words text-sm md:text-xl font-serif font-bold text-paper leading-tight text-right tracking-tight">{match.away}</h3>
+            <FitText text={match.away} align="right" className="text-sm md:text-xl font-serif font-bold text-paper leading-tight tracking-tight" />
             <Flag team={match.away} className="flex-shrink-0 w-6 h-4 md:w-9 md:h-6 ml-2 md:ml-3" />
           </button>
         </div>
