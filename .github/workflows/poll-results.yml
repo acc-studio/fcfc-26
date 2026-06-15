@@ -12,14 +12,25 @@ name: Poll live results
 # Plus ARBITER_CODE (the value in the config/arbiter doc) — the poller writes
 # results as a transient arbiter, which the tightened rules require.
 #
-# Cost note: */5 around the clock is ~8.6k runs/month. GitHub Actions minutes
-# are unlimited on public repos but capped (2,000/mo) on private ones — if this
-# repo is private, narrow the schedule to match days/hours or flip the repo
-# public. Disable the workflow once the tournament is over.
+# Reliable cadence: GitHub's `schedule` is best-effort and drops runs under load,
+# so the cron above is only a fallback. For a guaranteed interval, trigger this
+# workflow from an external scheduler (e.g. free cron-job.org) every 10 min:
+#   POST https://api.github.com/repos/acc-studio/fcfc-26/actions/workflows/poll-results.yml/dispatches
+#   Headers: Authorization: Bearer <PAT>, Accept: application/vnd.github+json,
+#            X-GitHub-Api-Version: 2022-11-28
+#   Body: {"ref":"main"}
+# PAT = a fine-grained token scoped to THIS repo with Actions: read and write.
+#
+# Cost note: GitHub Actions minutes are unlimited on public repos, capped
+# (2,000/mo) on private ones. Disable the workflow once the tournament is over.
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    # Best-effort fallback only. GitHub's scheduler delays/drops cron runs under
+    # load (top-of-hour worst), so a guaranteed cadence comes from an external
+    # trigger hitting the workflow_dispatch API (see README/CLAUDE.md). Offset
+    # off :00 to dodge the busiest slots.
+    - cron: '8,23,38,53 * * * *'
   workflow_dispatch:           # allow manual runs from the Actions tab
     inputs:
       dates:
