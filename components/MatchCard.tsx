@@ -242,6 +242,21 @@ export const MatchCard = ({
           </div>
         ) : null}
 
+        {/* Line-ups: tap the pitch to view XIs (real once announced, else last game) */}
+        {!showArbiter && (
+          <div className="flex justify-center pb-3 relative z-10">
+            <button
+              type="button"
+              onClick={() => setShowXI(true)}
+              aria-label="View line-ups"
+              title="Line-ups"
+              className="text-3xl md:text-4xl leading-none opacity-70 hover:opacity-100 hover:scale-110 transition-transform select-none touch-manipulation cursor-pointer"
+            >
+              🏟️
+            </button>
+          </div>
+        )}
+
         {/* Goalscorers / red cards (live + finished) */}
         {match.events && match.events.length > 0 && (
           <div className="px-4 md:px-8 pb-3 -mt-1 flex flex-col gap-1 relative z-10">
@@ -347,14 +362,6 @@ export const MatchCard = ({
                 )}
               </>
             )}
-
-            <button
-              type="button"
-              onClick={() => setShowXI(true)}
-              className="w-full py-2.5 border border-white/15 text-paper/60 font-mono font-bold uppercase tracking-wider hover:border-white/30 hover:text-paper/80 transition-colors rounded text-[11px]"
-            >
-              Line-ups (XI)
-            </button>
           </div>
         )}
 

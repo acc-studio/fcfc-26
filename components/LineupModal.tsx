@@ -49,7 +49,11 @@ export const LineupModal = ({ match, isOpen, onClose }: LineupModalProps) => {
             initial={{ scale: 0.95, opacity: 0, y: 10 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.95, opacity: 0, y: 10 }}
-            className="relative w-full max-w-lg max-h-[85vh] overflow-y-auto bg-pitch-800 border border-chalk rounded-xl shadow-2xl"
+            className={clsx(
+              "relative max-h-[94vh] overflow-y-auto bg-pitch-800 border border-chalk rounded-xl shadow-2xl",
+              view === 'pitch' ? "" : "w-full max-w-lg"
+            )}
+            style={view === 'pitch' ? { width: 'min(94vw, 62vh)' } : undefined}
           >
             {/* Header */}
             <div className="sticky top-0 bg-pitch-800 border-b border-white/10 px-5 py-4 flex items-center justify-between gap-3 z-10">
@@ -83,25 +87,37 @@ export const LineupModal = ({ match, isOpen, onClose }: LineupModalProps) => {
                   <span className="text-paper/25 normal-case tracking-normal">Usually available ~1 hour before kickoff.</span>
                 </p>
               )}
-              {status === 'ready' && data && view === 'pitch' && (
+              {status === 'ready' && data && (
                 <div className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-widest text-paper/70">
-                    <span className="flex items-center gap-1.5 min-w-0">
-                      <span className="w-3 h-3 rounded-full bg-paper shrink-0" />
-                      <span className="truncate">{data.home?.team || match.home}{data.home?.formation ? ` · ${data.home.formation}` : ''}</span>
-                    </span>
-                    <span className="flex items-center gap-1.5 min-w-0 justify-end text-right">
-                      <span className="truncate">{data.away?.team || match.away}{data.away?.formation ? ` · ${data.away.formation}` : ''}</span>
-                      <span className="w-3 h-3 rounded-full bg-gold shrink-0" />
-                    </span>
-                  </div>
-                  <Pitch home={data.home} away={data.away} />
-                </div>
-              )}
-              {status === 'ready' && data && view === 'list' && (
-                <div className="grid grid-cols-2 gap-4 md:gap-6">
-                  <TeamColumn lineup={data.home} fallback={match.home} />
-                  <TeamColumn lineup={data.away} fallback={match.away} />
+                  {data.source === 'last' && (
+                    <p className="text-center font-mono text-[10px] uppercase tracking-widest text-gold/70">
+                      Line-up not announced — last XI shown
+                    </p>
+                  )}
+                  {view === 'pitch' ? (
+                    <>
+                      <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-widest text-paper/70">
+                        <span className="flex items-center gap-1.5 min-w-0">
+                          <span className="w-3 h-3 rounded-full bg-paper shrink-0" />
+                          <span className="truncate">{data.home?.team || match.home}{data.home?.formation ? ` · ${data.home.formation}` : ''}</span>
+                        </span>
+                        <span className="flex items-center gap-1.5 min-w-0 justify-end text-right">
+                          <span className="truncate">{data.away?.team || match.away}{data.away?.formation ? ` · ${data.away.formation}` : ''}</span>
+                          <span className="w-3 h-3 rounded-full bg-gold shrink-0" />
+                        </span>
+                      </div>
+                      <Pitch
+                        home={data.home} away={data.away}
+                        homeNote={data.source === 'last' ? data.homeNote : undefined}
+                        awayNote={data.source === 'last' ? data.awayNote : undefined}
+                      />
+                    </>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-4 md:gap-6">
+                      <TeamColumn lineup={data.home} fallback={match.home} note={data.source === 'last' ? data.homeNote : undefined} />
+                      <TeamColumn lineup={data.away} fallback={match.away} note={data.source === 'last' ? data.awayNote : undefined} />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -112,7 +128,7 @@ export const LineupModal = ({ match, isOpen, onClose }: LineupModalProps) => {
   );
 };
 
-const TeamColumn = ({ lineup, fallback }: { lineup: TeamLineup | null; fallback: string }) => {
+const TeamColumn = ({ lineup, fallback, note }: { lineup: TeamLineup | null; fallback: string; note?: string }) => {
   const team = lineup?.team || fallback;
   return (
     <div className="min-w-0">
@@ -121,8 +137,9 @@ const TeamColumn = ({ lineup, fallback }: { lineup: TeamLineup | null; fallback:
         <span className="font-serif font-bold text-paper truncate">{team}</span>
       </div>
       {lineup?.formation && (
-        <p className="font-mono text-[10px] uppercase tracking-widest text-gold/70 mb-2">{lineup.formation}</p>
+        <p className="font-mono text-[10px] uppercase tracking-widest text-gold/70 mb-0.5">{lineup.formation}</p>
       )}
+      {note && <p className="font-mono text-[9px] text-paper/40 mb-2">{note}</p>}
 
       {!lineup || lineup.starters.length === 0 ? (
         <p className="font-mono text-[10px] text-paper/30">No XI</p>

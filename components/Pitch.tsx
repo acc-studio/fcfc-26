@@ -72,11 +72,23 @@ const placeTeam = (lineup: TeamLineup | null, side: 'home' | 'away') => {
   return nodes;
 };
 
-export const Pitch = ({ home, away }: { home: TeamLineup | null; away: TeamLineup | null }) => (
+export const Pitch = ({ home, away, homeNote, awayNote }: {
+  home: TeamLineup | null; away: TeamLineup | null; homeNote?: string; awayNote?: string;
+}) => (
   <div
     className="relative w-full aspect-[3/4] rounded-lg overflow-hidden border border-white/10"
     style={{ background: 'repeating-linear-gradient(to bottom, #16271E 0 8.33%, #1B2E23 8.33% 16.66%)' }}
   >
+    {awayNote && (
+      <div className="absolute top-1 left-1/2 -translate-x-1/2 z-10 text-[8px] md:text-[10px] font-mono text-paper/80 bg-pitch-900/70 px-2 py-0.5 rounded-full whitespace-nowrap">
+        {awayNote}
+      </div>
+    )}
+    {homeNote && (
+      <div className="absolute bottom-1 left-1/2 -translate-x-1/2 z-10 text-[8px] md:text-[10px] font-mono text-paper/80 bg-pitch-900/70 px-2 py-0.5 rounded-full whitespace-nowrap">
+        {homeNote}
+      </div>
+    )}
     {/* Markings */}
     <svg viewBox="0 0 100 133" preserveAspectRatio="none" className="absolute inset-0 w-full h-full" stroke="rgba(255,255,255,0.22)" strokeWidth="0.4" fill="none">
       <rect x="2" y="2" width="96" height="129" />

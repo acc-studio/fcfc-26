@@ -1,15 +1,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// Client-side fetch of starting XIs from the (unofficial) ESPN feed. Both the
-// scoreboard and summary endpoints send `Access-Control-Allow-Origin: *`, so the
-// browser can call them directly — no server, no storage. Lineups are published
-// ~1h before kickoff and during/after the match; before that the feed has no
-// rosters and we surface "not published yet".
+// Client-side fetch of starting XIs from the (unofficial) ESPN feed. Every
+// endpoint sends `Access-Control-Allow-Origin: *`, so the browser calls them
+// directly — no server, no storage. For a fixture whose lineup is published
+// (~1h pre-kickoff onward) we show the real XIs; before that we fall back to
+// each team's most recent line-up (from their last game, across competitions),
+// labelled with who/when on its side of the pitch.
 
 import { Match, kickoffMs } from './data';
 
-const BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world';
+const SOCCER = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
+const WC = `${SOCCER}/fifa.world`;
 
-// ESPN display name -> our canonical name (matches fixtures / TEAM_ISO).
 const ALIASES: Record<string, string> = {
   'United States': 'USA',
   'Bosnia-Herzegovina': 'Bosnia and Herzegovina',
@@ -28,27 +29,22 @@ const norm = (s: string) =>
     .replace(/&/g, ' ').replace(/\band\b/g, ' ').replace(/[^a-z0-9]+/g, '');
 const sameTeam = (espnName: string, ours: string) => norm(canon(espnName)) === norm(ours);
 
-export interface LineupPlayer {
-  name: string;
-  jersey: string;
-  pos: string;
-  subbedOut: boolean;
-}
-export interface TeamLineup {
-  team: string;
-  formation: string;
-  starters: LineupPlayer[];
-  subs: LineupPlayer[];
-}
+export interface LineupPlayer { name: string; jersey: string; pos: string; subbedOut: boolean; }
+export interface TeamLineup { team: string; formation: string; starters: LineupPlayer[]; subs: LineupPlayer[]; }
 export interface MatchLineups {
+  source: 'match' | 'last';   // real fixture XI, or each team's previous-game XI
   home: TeamLineup | null;
   away: TeamLineup | null;
+  homeNote?: string;          // e.g. "vs. Spain - 06.06.2026" (only when source = 'last')
+  awayNote?: string;
 }
 
+const json = (url: string) => fetch(url).then((r) => r.json());
+
 // YYYYMMDD range [kickoff-1d, kickoff+1d] in US Eastern (the dates ESPN files WC
-// games under), so we find the event regardless of our Turkey-time date drift.
+// games under), so we find the event despite Turkey-time date drift.
 function espnDateRange(ms: number): string {
-  const et = ms - 4 * 3600 * 1000; // EDT = UTC-4 in June/July
+  const et = ms - 4 * 3600 * 1000;
   const fmt = (m: number) => {
     const d = new Date(m);
     return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
@@ -57,7 +53,8 @@ function espnDateRange(ms: number): string {
 }
 
 function parseRoster(r: any): TeamLineup {
-  const players: LineupPlayer[] = (r.roster || []).map((p: any) => ({
+  const entries: any[] = r.roster || [];
+  const players: LineupPlayer[] = entries.map((p) => ({
     name: p.athlete?.displayName || p.athlete?.fullName || '?',
     jersey: String(p.jersey ?? p.athlete?.jersey ?? ''),
     pos: p.position?.abbreviation || '',
@@ -66,31 +63,83 @@ function parseRoster(r: any): TeamLineup {
   return {
     team: canon(r.team?.displayName || ''),
     formation: r.formation || '',
-    starters: players.filter((_, i) => (r.roster?.[i]?.starter)),
-    subs: players.filter((_, i) => !(r.roster?.[i]?.starter)),
+    starters: players.filter((_, i) => entries[i]?.starter),
+    subs: players.filter((_, i) => !entries[i]?.starter),
   };
 }
 
-// Resolve the ESPN event for a fixture, then return both XIs. Returns null when
-// the event can't be found; returns lineups with empty starters when the event
-// exists but rosters aren't published yet.
-export async function fetchLineups(match: Match): Promise<MatchLineups | null> {
-  const sb = await fetch(`${BASE}/scoreboard?dates=${espnDateRange(kickoffMs(match))}`).then(r => r.json());
-  const ev = (sb.events || []).find((e: any) => {
-    const cs = e.competitions?.[0]?.competitors || [];
-    if (cs.length !== 2) return false;
-    return (
-      (sameTeam(cs[0].team?.displayName, match.home) && sameTeam(cs[1].team?.displayName, match.away)) ||
-      (sameTeam(cs[0].team?.displayName, match.away) && sameTeam(cs[1].team?.displayName, match.home))
-    );
-  });
+// name (canonical) -> ESPN team id, memoized for the session.
+let idCache: Record<string, string> | null = null;
+async function teamId(name: string): Promise<string | null> {
+  if (!idCache) {
+    const d = await json(`${WC}/teams`);
+    const teams: any[] = d.sports?.[0]?.leagues?.[0]?.teams || [];
+    idCache = {};
+    for (const t of teams) {
+      const c = canon(t.team?.displayName || '');
+      if (c) idCache[norm(c)] = t.team.id;
+    }
+  }
+  return idCache[norm(name)] ?? null;
+}
+
+// A team's most recent completed match -> its XI + opponent/date for the label.
+async function fetchLastXI(team: string): Promise<{ lineup: TeamLineup; opponent: string; date: string } | null> {
+  const id = await teamId(team);
+  if (!id) return null;
+  const sch = await json(`${SOCCER}/all/teams/${id}/schedule`);
+  const ev = (sch.events || []).find((e: any) => e.competitions?.[0]?.status?.type?.state === 'post');
   if (!ev) return null;
 
-  const sum = await fetch(`${BASE}/summary?event=${ev.id}`).then(r => r.json());
-  const rosters: any[] = sum.rosters || [];
-  const pick = (team: string) => {
-    const r = rosters.find((x) => sameTeam(x.team?.displayName || '', team));
-    return r ? parseRoster(r) : null;
+  const slug = ev.league?.slug || 'fifa.world';
+  const sum = await json(`${SOCCER}/${slug}/summary?event=${ev.id}`);
+  const r = (sum.rosters || []).find((x: any) => sameTeam(x.team?.displayName || '', team));
+  if (!r) return null;
+  const lineup = parseRoster(r);
+  if (!lineup.starters.length) return null;
+
+  const opp = (ev.competitions[0].competitors || []).find((x: any) => !sameTeam(x.team?.displayName || '', team));
+  const [y, m, d] = (ev.date || '').slice(0, 10).split('-');
+  return {
+    lineup,
+    opponent: opp ? canon(opp.team?.displayName || '?') : '?',
+    date: d && m && y ? `${d}.${m}.${y}` : '',
   };
-  return { home: pick(match.home), away: pick(match.away) };
+}
+
+export async function fetchLineups(match: Match): Promise<MatchLineups | null> {
+  // 1) This fixture's own published line-up.
+  try {
+    const sb = await json(`${WC}/scoreboard?dates=${espnDateRange(kickoffMs(match))}`);
+    const ev = (sb.events || []).find((e: any) => {
+      const cs = e.competitions?.[0]?.competitors || [];
+      return cs.length === 2 &&
+        ((sameTeam(cs[0].team?.displayName, match.home) && sameTeam(cs[1].team?.displayName, match.away)) ||
+         (sameTeam(cs[0].team?.displayName, match.away) && sameTeam(cs[1].team?.displayName, match.home)));
+    });
+    if (ev) {
+      const sum = await json(`${WC}/summary?event=${ev.id}`);
+      const rosters: any[] = sum.rosters || [];
+      const pick = (t: string) => {
+        const r = rosters.find((x) => sameTeam(x.team?.displayName || '', t));
+        return r ? parseRoster(r) : null;
+      };
+      const home = pick(match.home), away = pick(match.away);
+      if (home?.starters.length || away?.starters.length) return { source: 'match', home, away };
+    }
+  } catch { /* fall through to last-game */ }
+
+  // 2) Not announced yet -> each team's previous-game XI.
+  const [hr, ar] = await Promise.all([
+    fetchLastXI(match.home).catch(() => null),
+    fetchLastXI(match.away).catch(() => null),
+  ]);
+  if (!hr && !ar) return null;
+  return {
+    source: 'last',
+    home: hr?.lineup ?? null,
+    away: ar?.lineup ?? null,
+    homeNote: hr ? `vs. ${hr.opponent} - ${hr.date}` : undefined,
+    awayNote: ar ? `vs. ${ar.opponent} - ${ar.date}` : undefined,
+  };
 }
