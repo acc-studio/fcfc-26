@@ -1,14 +1,14 @@
 name: Refresh team form
 
 # Pulls each nation's last-5 results into Firestore `teams/{name}` docs for the
-# form indicators. Form only changes when a team plays, so a few times a day is
-# plenty — GitHub's best-effort schedule is fine here (unlike the live poller,
-# this doesn't need a guaranteed cadence). Run manually anytime from the Actions
-# tab. Needs the same secrets as the poller, including ARBITER_CODE.
+# form indicators. Runs hourly (best-effort GitHub schedule); if GitHub drops too
+# many runs we'll move it to an external trigger like the live poller. Run
+# manually anytime from the Actions tab. Needs the same secrets as the poller,
+# including ARBITER_CODE.
 
 on:
   schedule:
-    - cron: '17 */6 * * *'      # ~4x/day, offset off the hour
+    - cron: '17 * * * *'        # hourly, offset off the top of the hour
   workflow_dispatch: {}
 
 concurrency:
