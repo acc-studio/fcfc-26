@@ -1,5 +1,5 @@
 'use client';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
 import { computePunterStats, type PunterStat } from '@/lib/data';
@@ -8,6 +8,11 @@ import { Emoji, isDistortedFace, DISTORTED_FACE_SRC } from '@/components/Emoji';
 // Distinct line colours for the race. Warm/editorial palette that sits inside
 // the paper/gold/signal theme rather than fighting it.
 const LINE_COLORS = ['#E8C547', '#E8743B', '#7FB069', '#5BC0BE', '#C46BAA', '#D98C5F', '#9FB4FF', '#E0584B'];
+
+// Stable colour per punter, keyed off their position in the canonical `stats`
+// order so a colour never shifts when lines are hidden/shown in the race.
+const colorOf = (stats: PunterStat[], id: string) =>
+  LINE_COLORS[Math.max(0, stats.findIndex(s => s.id === id)) % LINE_COLORS.length];
 
 // Streak badge: 🔥 for a winning run, 🧊 for a losing run, with the count.
 const StreakBadge = ({ stat, className }: { stat: PunterStat; className?: string }) => {
@@ -47,11 +52,21 @@ const StatCard = ({
   </div>
 );
 
+// What's currently under the pointer on the race chart: a grid point identified
+// by match step `i` and cumulative points `p` (which fix its sx/sy). Multiple
+// punters can share it when their scores are tied at that match.
+type HoverPoint = { i: number; p: number; sx: number; sy: number };
+
+const GOLD = '#D4AF37';
+
 // SVG race chart: cumulative points (y) over finished matches (x), one line per
-// punter, with their emoji parked at the leading edge.
-const RaceChart = ({ stats, steps }: { stats: PunterStat[]; steps: number }) => {
+// punter, with their emoji parked at the leading edge. `visible` is the subset
+// to draw (the chart re-scales to it); `allStats` keeps colours stable.
+const RaceChart = ({ visible, allStats, steps }: { visible: PunterStat[]; allStats: PunterStat[]; steps: number }) => {
+  const stats = visible;
   const W = 360, H = 220;
   const EMOJI = 16;
+  const [hover, setHover] = useState<HoverPoint | null>(null);
 
   // Every line ends at the same x (the right edge), so punters on the same score
   // would stack their emoji at the same point. Count how many share each score
@@ -83,47 +98,120 @@ const RaceChart = ({ stats, steps }: { stats: PunterStat[]; steps: number }) => 
   });
   const endX = x(maxX);
 
+  // Everyone sitting on the hovered point (tied scores at the same match).
+  const members = hover ? stats.filter(s => s.timeline[hover.i] === hover.p) : [];
+  const memberIds = new Set(members.map(s => s.id));
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Points race over time">
-      {ticks.map(p => (
-        <g key={p}>
-          <line x1={padL} x2={endX} y1={y(p)} y2={y(p)} stroke="#ffffff" strokeOpacity={0.06} strokeWidth={1} />
-          <text x={padL - 2} y={y(p) + 3} fontSize={8} fill="#ffffff" fillOpacity={0.3} fontFamily="monospace" textAnchor="end">{p}</text>
-        </g>
-      ))}
-      {stats.map((s, idx) => {
-        const color = LINE_COLORS[idx % LINE_COLORS.length];
-        const pts = s.timeline.map((p, i) => `${x(i)},${y(p)}`).join(' ');
-        const endY = y(s.points);
-        return (
-          <g key={s.id}>
-            <motion.polyline
-              points={pts}
-              fill="none"
-              stroke={color}
-              strokeWidth={2}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              initial={{ pathLength: 0, opacity: 0 }}
-              animate={{ pathLength: 1, opacity: 1 }}
-              transition={{ duration: 0.9, delay: idx * 0.08, ease: 'easeOut' }}
-            />
-            <circle cx={endX} cy={endY} r={2.5} fill={color} />
-            {isDistortedFace(s.avatar) ? (
-              <image
-                href={DISTORTED_FACE_SRC}
-                x={endX + 3 + slot[idx] * EMOJI}
-                y={endY - EMOJI / 2}
-                width={EMOJI}
-                height={EMOJI}
-              />
-            ) : (
-              <text x={endX + 3 + slot[idx] * EMOJI} y={endY + 4} fontSize={13}>{s.avatar}</text>
-            )}
+    <div className="relative w-full">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Points race over time">
+        {/* Tapping empty space dismisses an open tooltip (touch has no mouse-leave). */}
+        <rect x={0} y={0} width={W} height={H} fill="transparent" onClick={() => setHover(null)} />
+        {ticks.map(p => (
+          <g key={p}>
+            <line x1={padL} x2={endX} y1={y(p)} y2={y(p)} stroke="#ffffff" strokeOpacity={0.06} strokeWidth={1} />
+            <text x={padL - 2} y={y(p) + 3} fontSize={8} fill="#ffffff" fillOpacity={0.3} fontFamily="monospace" textAnchor="end">{p}</text>
           </g>
+        ))}
+        {stats.map((s, idx) => {
+          const color = colorOf(allStats, s.id);
+          const pts = s.timeline.map((p, i) => `${x(i)},${y(p)}`).join(' ');
+          const endY = y(s.points);
+          const dim = hover && !memberIds.has(s.id);
+          return (
+            <g key={s.id}>
+              <motion.polyline
+                points={pts}
+                fill="none"
+                stroke={color}
+                strokeWidth={2}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                initial={{ pathLength: 0, opacity: 0 }}
+                animate={{ pathLength: 1, opacity: dim ? 0.25 : 1 }}
+                transition={{ duration: 0.9, delay: idx * 0.08, ease: 'easeOut' }}
+              />
+              <circle cx={endX} cy={endY} r={2.5} fill={color} />
+              {isDistortedFace(s.avatar) ? (
+                <image
+                  href={DISTORTED_FACE_SRC}
+                  x={endX + 3 + slot[idx] * EMOJI}
+                  y={endY - EMOJI / 2}
+                  width={EMOJI}
+                  height={EMOJI}
+                />
+              ) : (
+                <text x={endX + 3 + slot[idx] * EMOJI} y={endY + 4} fontSize={13}>{s.avatar}</text>
+              )}
+            </g>
+          );
+        })}
+        {/* Hover targets last so they sit on top of every line. One invisible,
+            generously-sized dot per data point feeds the tooltip. */}
+        {stats.map(s => {
+          const color = colorOf(allStats, s.id);
+          return s.timeline.map((p, i) => {
+            const cx = x(i), cy = y(p);
+            const active = hover?.sx === cx && hover?.sy === cy;
+            return (
+              <g key={`${s.id}-${i}`}>
+                {active && <circle cx={cx} cy={cy} r={3.5} fill={color} stroke="#0f1a14" strokeWidth={1.5} />}
+                <circle
+                  cx={cx}
+                  cy={cy}
+                  r={7}
+                  fill="transparent"
+                  className="cursor-pointer"
+                  onMouseEnter={() => setHover({ i, p, sx: cx, sy: cy })}
+                  onMouseLeave={() => setHover(prev => (prev?.sx === cx && prev?.sy === cy ? null : prev))}
+                  onClick={e => {
+                    // Tap toggles the same tooltip hover shows; stop the click
+                    // from reaching the background dismiss layer.
+                    e.stopPropagation();
+                    setHover(active ? null : { i, p, sx: cx, sy: cy });
+                  }}
+                />
+              </g>
+            );
+          });
+        })}
+      </svg>
+
+      {hover && members.length > 0 && (() => {
+        // One colour when a single punter is on the point; gold when it's a tie.
+        const accent = members.length === 1 ? colorOf(allStats, members[0].id) : GOLD;
+        return (
+          <div
+            className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full"
+            style={{ left: `${(hover.sx / W) * 100}%`, top: `calc(${(hover.sy / H) * 100}% - 8px)` }}
+          >
+            <div
+              className="flex flex-col gap-1 whitespace-nowrap rounded border bg-pitch-900/95 px-2.5 py-1.5"
+              style={{ borderColor: accent }}
+            >
+              {members.map(m => {
+                const c = colorOf(allStats, m.id);
+                return (
+                  <div key={m.id} className="flex items-center gap-2">
+                    <span className="h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: c }} />
+                    <span className="text-sm leading-none"><Emoji emoji={m.avatar} /></span>
+                    <span className="font-sans text-xs font-bold leading-none text-paper">{m.name}</span>
+                    <span className="ml-auto pl-1 font-mono text-xs font-bold leading-none tabular-nums" style={{ color: c }}>
+                      {hover.p} pt{hover.p === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            {/* little caret pointing at the data point */}
+            <div
+              className="mx-auto h-0 w-0"
+              style={{ borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: `5px solid ${accent}` }}
+            />
+          </div>
         );
-      })}
-    </svg>
+      })()}
+    </div>
   );
 };
 
@@ -135,6 +223,17 @@ export const AnalyticsLab = ({ users, bets, matches, onBack }: any) => {
 
   // Leaderboard order for the legend / streak list.
   const ranked = useMemo(() => [...stats].sort((a, b) => b.points - a.points), [stats]);
+
+  // Punters hidden from the race chart (toggled off via the legend). Stored by
+  // id so the set survives re-renders / order changes.
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const toggle = (id: string) =>
+    setHidden(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  const visible = useMemo(() => stats.filter(s => !hidden.has(s.id)), [stats, hidden]);
 
   // Headline stats.
   const hottest = useMemo(
@@ -180,8 +279,36 @@ export const AnalyticsLab = ({ users, bets, matches, onBack }: any) => {
           <div className="mb-3 font-mono text-[10px] uppercase tracking-widest text-paper/40 border-b border-chalk pb-2">
             The Race
           </div>
-          <div className="bg-pitch-800/20 border border-chalk rounded p-2 mb-8">
-            <RaceChart stats={stats} steps={finished.length} />
+          <div className="bg-pitch-800/20 border border-chalk rounded p-2 mb-3">
+            <RaceChart visible={visible} allStats={stats} steps={finished.length} />
+          </div>
+
+          {/* Toggleable legend: tap a punter to drop their line, tap again to
+              bring it back. Defaults to everyone shown. */}
+          <div className="flex flex-wrap gap-2 mb-8">
+            {ranked.map(s => {
+              const off = hidden.has(s.id);
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => toggle(s.id)}
+                  aria-pressed={!off}
+                  className={clsx(
+                    'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border font-mono text-[11px] transition-colors',
+                    off
+                      ? 'border-chalk/40 text-paper/30 bg-transparent'
+                      : 'border-chalk text-paper bg-pitch-800/40',
+                  )}
+                >
+                  <span
+                    className="w-2.5 h-2.5 rounded-sm shrink-0"
+                    style={{ backgroundColor: off ? 'transparent' : colorOf(stats, s.id), boxShadow: off ? 'inset 0 0 0 1.5px rgba(255,255,255,0.25)' : undefined }}
+                  />
+                  <span className={clsx('text-sm', off && 'opacity-40')}><Emoji emoji={s.avatar} /></span>
+                  <span className={clsx('font-sans font-bold', off && 'line-through')}>{s.name}</span>
+                </button>
+              );
+            })}
           </div>
 
           {/* Headline cards */}
@@ -223,7 +350,7 @@ export const AnalyticsLab = ({ users, bets, matches, onBack }: any) => {
             Form Guide
           </div>
           <div className="flex flex-col gap-2">
-            {ranked.map((s, idx) => (
+            {ranked.map(s => (
               <div
                 key={s.id}
                 className="flex items-center justify-between p-3 rounded border border-transparent bg-pitch-800/30"
@@ -231,7 +358,7 @@ export const AnalyticsLab = ({ users, bets, matches, onBack }: any) => {
                 <div className="flex items-center gap-3">
                   <span
                     className="w-2.5 h-2.5 rounded-sm shrink-0"
-                    style={{ backgroundColor: LINE_COLORS[stats.findIndex(x => x.id === s.id) % LINE_COLORS.length] }}
+                    style={{ backgroundColor: colorOf(stats, s.id) }}
                   />
                   <span className="text-lg"><Emoji emoji={s.avatar} /></span>
                   <span className="font-sans font-bold text-sm text-paper">{s.name}</span>
