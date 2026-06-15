@@ -1,11 +1,11 @@
 'use client';
 import { clsx } from 'clsx';
 
-// The "distorted face" (U+1FAE8, Unicode 15) ships in almost no emoji fonts yet
+// The "shaking face" (U+1FAEA, Unicode 15) ships in almost no emoji fonts yet
 // — on Windows it renders as a tofu box. We special-case just that one glyph
 // with a bundled SVG (Noto Color Emoji, in public/emoji); every other emoji
 // renders natively through the OS font exactly as before.
-export const DISTORTED_FACE = String.fromCodePoint(0x1fae8);
+export const DISTORTED_FACE = String.fromCodePoint(0x1faea);
 export const DISTORTED_FACE_SRC = '/emoji/distorted-face.svg';
 
 export function isDistortedFace(emoji: string): boolean {
