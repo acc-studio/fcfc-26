@@ -1,6 +1,5 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
 import { ScoreDial } from './ScoreDial';
 import { Match, Player, Pick, MatchEvent, FormMatch, betOutcome } from '@/lib/data';
@@ -73,12 +72,14 @@ interface MatchCardProps {
   // Recent form (last 5, most-recent first) for each side, from the `teams` feed.
   homeForm?: FormMatch[];
   awayForm?: FormMatch[];
+  // Extra classes for the root (e.g. masonry break/spacing from the parent).
+  className?: string;
 }
 
 export const MatchCard = ({
   match, userBets, players, onPick, onLockIn, onSetResult, onReopen,
   activeUser, isArbiter, locked = false, notYetOpen = false,
-  homeForm, awayForm,
+  homeForm, awayForm, className,
 }: MatchCardProps) => {
   const [adminScore, setAdminScore] = useState({ home: 0, away: 0 });
   const [showBets, setShowBets] = useState(false);
@@ -135,7 +136,7 @@ export const MatchCard = ({
   };
 
   return (
-    <motion.div layout className="relative w-full flex group filter drop-shadow-lg">
+    <div className={clsx("relative w-full flex group filter drop-shadow-lg", className)}>
       {/* --- LEFT SIDE: Main Ticket --- */}
       <div className={clsx(
         "flex-1 rounded-l-xl border-y border-l transition-colors duration-300 relative overflow-hidden",
@@ -367,6 +368,6 @@ export const MatchCard = ({
           {isFinished ? "FIN" : isLive ? "LIVE" : notYetOpen ? "SOON" : (myBet?.locked || locked) ? "LOCKED" : myPick ? "PICK" : "BET"}
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 };
