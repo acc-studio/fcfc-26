@@ -1,9 +1,11 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { clsx } from 'clsx';
 import { Match } from '@/lib/data';
 import { fetchLineups, MatchLineups, TeamLineup } from '@/lib/espn';
 import { Flag } from './Flag';
+import { Pitch } from './Pitch';
 
 interface LineupModalProps {
   match: Match;
@@ -16,6 +18,7 @@ type Status = 'loading' | 'ready' | 'none' | 'error';
 export const LineupModal = ({ match, isOpen, onClose }: LineupModalProps) => {
   const [status, setStatus] = useState<Status>('loading');
   const [data, setData] = useState<MatchLineups | null>(null);
+  const [view, setView] = useState<'pitch' | 'list'>('pitch');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -49,9 +52,22 @@ export const LineupModal = ({ match, isOpen, onClose }: LineupModalProps) => {
             className="relative w-full max-w-lg max-h-[85vh] overflow-y-auto bg-pitch-800 border border-chalk rounded-xl shadow-2xl"
           >
             {/* Header */}
-            <div className="sticky top-0 bg-pitch-800 border-b border-white/10 px-5 py-4 flex items-center justify-between z-10">
-              <h3 className="font-serif text-xl text-paper">Starting XI</h3>
-              <button onClick={onClose} aria-label="Close" className="text-paper/40 hover:text-paper font-mono text-lg leading-none">✕</button>
+            <div className="sticky top-0 bg-pitch-800 border-b border-white/10 px-5 py-4 flex items-center justify-between gap-3 z-10">
+              <div className="flex items-center gap-3 min-w-0">
+                <h3 className="font-serif text-xl text-paper shrink-0">Starting XI</h3>
+                <div className="flex rounded border border-white/15 overflow-hidden font-mono text-[9px] uppercase tracking-widest">
+                  {(['pitch', 'list'] as const).map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => setView(v)}
+                      className={clsx("px-2.5 py-1 transition-colors", view === v ? "bg-paper text-pitch-900 font-bold" : "text-paper/50 hover:text-paper")}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button onClick={onClose} aria-label="Close" className="text-paper/40 hover:text-paper font-mono text-lg leading-none shrink-0">✕</button>
             </div>
 
             <div className="p-5">
@@ -67,7 +83,22 @@ export const LineupModal = ({ match, isOpen, onClose }: LineupModalProps) => {
                   <span className="text-paper/25 normal-case tracking-normal">Usually available ~1 hour before kickoff.</span>
                 </p>
               )}
-              {status === 'ready' && data && (
+              {status === 'ready' && data && view === 'pitch' && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-widest text-paper/70">
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      <span className="w-3 h-3 rounded-full bg-paper shrink-0" />
+                      <span className="truncate">{data.home?.team || match.home}{data.home?.formation ? ` · ${data.home.formation}` : ''}</span>
+                    </span>
+                    <span className="flex items-center gap-1.5 min-w-0 justify-end text-right">
+                      <span className="truncate">{data.away?.team || match.away}{data.away?.formation ? ` · ${data.away.formation}` : ''}</span>
+                      <span className="w-3 h-3 rounded-full bg-gold shrink-0" />
+                    </span>
+                  </div>
+                  <Pitch home={data.home} away={data.away} />
+                </div>
+              )}
+              {status === 'ready' && data && view === 'list' && (
                 <div className="grid grid-cols-2 gap-4 md:gap-6">
                   <TeamColumn lineup={data.home} fallback={match.home} />
                   <TeamColumn lineup={data.away} fallback={match.away} />
