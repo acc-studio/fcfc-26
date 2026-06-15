@@ -34,26 +34,35 @@ function buildRows(lineup: TeamLineup): { gk: LineupPlayer | null; rows: LineupP
   return { gk, rows };
 }
 
-// y positions (% of pitch height) per team, GK nearest its own goal line.
+// y positions (% of pitch height) per team, GK nearest its own goal line. The
+// outfield spreads across most of each half so lines don't crowd vertically.
 function yFor(side: 'home' | 'away', rowIdx: number, rowCount: number): number {
-  const span = 26; // how far the outfield lines spread toward the centre
+  const span = 33; // how far the outfield lines spread toward the centre
   if (side === 'home') {
-    const near = 80, step = rowCount > 1 ? span / (rowCount - 1) : 0;
+    const near = 85, step = rowCount > 1 ? span / (rowCount - 1) : 0;
     return near - rowIdx * step;
   }
-  const near = 20, step = rowCount > 1 ? span / (rowCount - 1) : 0;
+  const near = 15, step = rowCount > 1 ? span / (rowCount - 1) : 0;
   return near + rowIdx * step;
 }
 
+// Sizes are in container-query units (cqw = 1% of pitch width) so chips and
+// names scale with the pitch, clamped so they never get tiny or overlap.
 const Chip = ({ p, x, y, side }: { p: LineupPlayer; x: number; y: number; side: 'home' | 'away' }) => (
-  <div className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center w-12" style={{ left: `${x}%`, top: `${y}%` }}>
+  <div
+    className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center w-[clamp(44px,16cqw,96px)]"
+    style={{ left: `${x}%`, top: `${y}%` }}
+  >
     <div className={clsx(
-      "w-5 h-5 md:w-6 md:h-6 rounded-full flex items-center justify-center text-[9px] md:text-[10px] font-mono font-bold border border-pitch-900/40",
+      "rounded-full flex items-center justify-center font-mono font-bold border border-pitch-900/40 w-[clamp(20px,8cqw,48px)] h-[clamp(20px,8cqw,48px)] text-[clamp(10px,3.6cqw,22px)]",
       side === 'home' ? "bg-paper text-pitch-900" : "bg-gold text-pitch-900"
     )}>
       {p.jersey}
     </div>
-    <span className="mt-0.5 text-[7px] md:text-[8px] leading-none text-paper text-center truncate w-full [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
+    <span
+      title={p.name}
+      className="mt-1 leading-tight text-paper text-center truncate w-full text-[clamp(10px,3.3cqw,20px)] [text-shadow:0_1px_3px_rgba(0,0,0,0.9)]"
+    >
       {surname(p.name)}
     </span>
   </div>
@@ -77,7 +86,10 @@ export const Pitch = ({ home, away, homeNote, awayNote }: {
 }) => (
   <div
     className="relative w-full aspect-[3/4] rounded-lg overflow-hidden border border-white/10"
-    style={{ background: 'repeating-linear-gradient(to bottom, #16271E 0 8.33%, #1B2E23 8.33% 16.66%)' }}
+    style={{
+      background: 'repeating-linear-gradient(to bottom, #16271E 0 8.33%, #1B2E23 8.33% 16.66%)',
+      containerType: 'inline-size',
+    }}
   >
     {awayNote && (
       <div className="absolute top-1 left-1/2 -translate-x-1/2 z-10 text-[8px] md:text-[10px] font-mono text-paper/80 bg-pitch-900/70 px-2 py-0.5 rounded-full whitespace-nowrap">
