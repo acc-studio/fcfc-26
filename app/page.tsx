@@ -309,10 +309,10 @@ export default function WorldCupApp() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }}
                 transition={{ duration: 0.3 }}
-                className="columns-1 lg:columns-2 gap-6"
+                className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start"
               >
                 {upNextMatches.length === 0 ? (
-                  <p className="text-center py-16 font-mono text-xs uppercase tracking-widest text-paper/40">
+                  <p className="lg:col-span-2 text-center py-16 font-mono text-xs uppercase tracking-widest text-paper/40">
                     No matches kicking off in the next 48 hours.
                   </p>
                 ) : (
@@ -330,7 +330,6 @@ export default function WorldCupApp() {
                       isArbiter={isArbiter}
                       homeForm={teamForm[match.home]}
                       awayForm={teamForm[match.away]}
-                      className="mb-6 break-inside-avoid"
                       locked={nowMs >= kickoffMs(match)}
                     />
                   ))
@@ -345,10 +344,10 @@ export default function WorldCupApp() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }}
                 transition={{ duration: 0.3 }}
-                className="columns-1 lg:columns-2 gap-6"
+                className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start"
               >
                 {upcomingMatches.length === 0 ? (
-                  <p className="text-center py-16 font-mono text-xs uppercase tracking-widest text-paper/40">
+                  <p className="lg:col-span-2 text-center py-16 font-mono text-xs uppercase tracking-widest text-paper/40">
                     No further fixtures scheduled.
                   </p>
                 ) : (
@@ -366,7 +365,6 @@ export default function WorldCupApp() {
                       isArbiter={isArbiter}
                       homeForm={teamForm[match.home]}
                       awayForm={teamForm[match.away]}
-                      className="mb-6 break-inside-avoid"
                       notYetOpen
                     />
                   ))
@@ -381,10 +379,10 @@ export default function WorldCupApp() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }}
                 transition={{ duration: 0.3 }}
-                className="columns-1 lg:columns-2 gap-6"
+                className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start"
               >
                 {pastMatches.length === 0 ? (
-                  <p className="text-center py-16 font-mono text-xs uppercase tracking-widest text-paper/40">
+                  <p className="lg:col-span-2 text-center py-16 font-mono text-xs uppercase tracking-widest text-paper/40">
                     No completed matches yet.
                   </p>
                 ) : (
@@ -402,7 +400,6 @@ export default function WorldCupApp() {
                       isArbiter={isArbiter}
                       homeForm={teamForm[match.home]}
                       awayForm={teamForm[match.away]}
-                      className="mb-6 break-inside-avoid"
                       locked
                     />
                   ))
