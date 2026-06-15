@@ -68,24 +68,31 @@ function parseRoster(r: any): TeamLineup {
   };
 }
 
-// name (canonical) -> ESPN team id, memoized for the session.
-let idCache: Record<string, string> | null = null;
-async function teamId(name: string): Promise<string | null> {
-  if (!idCache) {
-    const d = await json(`${WC}/teams`);
-    const teams: any[] = d.sports?.[0]?.leagues?.[0]?.teams || [];
-    idCache = {};
-    for (const t of teams) {
-      const c = canon(t.team?.displayName || '');
-      if (c) idCache[norm(c)] = t.team.id;
-    }
-  }
-  return idCache[norm(name)] ?? null;
-}
+// Canonical name -> ESPN team id. Hardcoded because the /teams endpoint (unlike
+// scoreboard/schedule/summary) does NOT send CORS headers, so the browser can't
+// fetch it. These ids are stable.
+const TEAM_ESPN_ID: Record<string, string> = {
+  'Algeria': '624', 'Argentina': '202', 'Australia': '628', 'Austria': '474',
+  'Belgium': '459', 'Bosnia and Herzegovina': '452', 'Brazil': '205', 'Canada': '206',
+  'Cape Verde': '2597', 'Colombia': '208', 'Croatia': '477', 'Curaçao': '11678',
+  'Czechia': '450', 'DR Congo': '2850', 'Ecuador': '209', 'Egypt': '2620',
+  'England': '448', 'France': '478', 'Germany': '481', 'Ghana': '4469',
+  'Haiti': '2654', 'Iran': '469', 'Iraq': '4375', 'Ivory Coast': '4789',
+  'Japan': '627', 'Jordan': '2917', 'Mexico': '203', 'Morocco': '2869',
+  'Netherlands': '449', 'New Zealand': '2666', 'Norway': '464', 'Panama': '2659',
+  'Paraguay': '210', 'Portugal': '482', 'Qatar': '4398', 'Saudi Arabia': '655',
+  'Scotland': '580', 'Senegal': '654', 'South Africa': '467', 'South Korea': '451',
+  'Spain': '164', 'Sweden': '466', 'Switzerland': '475', 'Tunisia': '659',
+  'Türkiye': '465', 'Uruguay': '212', 'USA': '660', 'Uzbekistan': '2570',
+};
+const ID_BY_NORM: Record<string, string> = Object.fromEntries(
+  Object.entries(TEAM_ESPN_ID).map(([k, v]) => [norm(k), v])
+);
+const teamId = (name: string): string | null => ID_BY_NORM[norm(name)] ?? null;
 
 // A team's most recent completed match -> its XI + opponent/date for the label.
 async function fetchLastXI(team: string): Promise<{ lineup: TeamLineup; opponent: string; date: string } | null> {
-  const id = await teamId(team);
+  const id = teamId(team);
   if (!id) return null;
   const sch = await json(`${SOCCER}/all/teams/${id}/schedule`);
   const ev = (sch.events || []).find((e: any) => e.competitions?.[0]?.status?.type?.state === 'post');

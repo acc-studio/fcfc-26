@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import { Match } from '@/lib/data';
@@ -36,7 +37,7 @@ export const LineupModal = ({ match, isOpen, onClose }: LineupModalProps) => {
     return () => { cancelled = true; };
   }, [isOpen, match]);
 
-  return (
+  const tree = (
     <AnimatePresence>
       {isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
@@ -126,6 +127,10 @@ export const LineupModal = ({ match, isOpen, onClose }: LineupModalProps) => {
       )}
     </AnimatePresence>
   );
+
+  // Portal to <body> so the overlay covers the whole viewport — the card root's
+  // `filter` would otherwise make it the containing block for our fixed overlay.
+  return typeof document !== 'undefined' ? createPortal(tree, document.body) : null;
 };
 
 const TeamColumn = ({ lineup, fallback, note }: { lineup: TeamLineup | null; fallback: string; note?: string }) => {
