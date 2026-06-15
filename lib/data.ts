@@ -145,6 +145,100 @@ export function computePunterStats(
   return { finished, stats };
 }
 
+// --- Crowd / risk analytics -----------------------------------------------
+// Group-betting tendencies derived from each finished match's committed picks.
+// A "risky" pick is an underdog pick: the option you took drew at most 2 backers
+// while another option pulled at least 3 — you went against the crowd. It "pays
+// off" when that option is the actual result.
+const MAJORITY = 4;   // a clear majority of the 6-player group
+const FAVORITE = 3;   // the crowd's favourite option
+const UNDERDOG = 2;   // an underdog option draws at most this many backers
+
+export interface RiskRecord {
+  id: string;
+  name: string;
+  avatar: string;
+  risky: number;   // risky picks made
+  hits: number;    // risky picks that paid off
+}
+export interface CrowdStats {
+  wisdomPct: number | null;   // % of majority games the crowd got right
+  wisdomGames: number;        // games that had a qualifying majority
+  darkHorsePct: number | null; // % of underdog-situation games the underdog won
+  darkHorseGames: number;      // games where an underdog option existed
+  jockey: RiskRecord | null;   // most paid-off risky bets
+  gambler: RiskRecord | null;  // most risky bets overall
+}
+
+export function computeCrowdStats(
+  users: Player[],
+  bets: Record<string, Bet | undefined>,
+  matches: Match[],
+): CrowdStats {
+  const finished = finishedInOrder(matches);
+  let wisdomGames = 0, wisdomHits = 0, darkHorseGames = 0, darkHorseHits = 0;
+  const record: Record<string, RiskRecord> = {};
+  for (const u of users) record[u.id] = { id: u.id, name: u.name, avatar: u.avatar, risky: 0, hits: 0 };
+
+  for (const m of finished) {
+    const result = resultOutcome(m.result_home, m.result_away);
+    if (!result) continue;
+    // Committed picks for this match, tallied per option.
+    const counts: Record<Pick, number> = { HOME: 0, DRAW: 0, AWAY: 0 };
+    const picks: { id: string; pick: Pick }[] = [];
+    for (const u of users) {
+      const pick = bets[`${u.id}_${m.id}`]?.pick;
+      if (!pick) continue;
+      counts[pick]++;
+      picks.push({ id: u.id, pick });
+    }
+
+    // Wisdom of the crowd: a single option backed by >=4 of the group.
+    const majority = (['HOME', 'DRAW', 'AWAY'] as Pick[]).find(o => counts[o] >= MAJORITY);
+    if (majority) {
+      wisdomGames++;
+      if (majority === result) wisdomHits++;
+    }
+
+    // Underdog situation: some option is a favourite (>=3) while another draws
+    // 1–2 backers. The dark horse "pays off" when that underdog is the result.
+    const hasFavorite = (['HOME', 'DRAW', 'AWAY'] as Pick[]).some(o => counts[o] >= FAVORITE);
+    const hasUnderdog = (['HOME', 'DRAW', 'AWAY'] as Pick[]).some(o => counts[o] >= 1 && counts[o] <= UNDERDOG);
+    if (hasFavorite && hasUnderdog) {
+      darkHorseGames++;
+      if (counts[result] >= 1 && counts[result] <= UNDERDOG) darkHorseHits++;
+    }
+
+    // Per-punter: a pick is risky if it drew <=2 backers while another option
+    // drew >=3. It paid off if it was the result.
+    for (const { id, pick } of picks) {
+      const otherFavorite = (['HOME', 'DRAW', 'AWAY'] as Pick[]).some(o => o !== pick && counts[o] >= FAVORITE);
+      if (counts[pick] <= UNDERDOG && otherFavorite) {
+        record[id].risky++;
+        if (pick === result) record[id].hits++;
+      }
+    }
+  }
+
+  const pct = (hit: number, total: number) => (total > 0 ? Math.round((hit / total) * 100) : null);
+  const riskers = Object.values(record).filter(r => r.risky > 0);
+  const jockey = riskers.length
+    ? [...riskers].sort((a, b) => b.hits - a.hits || b.risky - a.risky)[0]
+    : null;
+  const gambler = riskers.length
+    ? [...riskers].sort((a, b) => b.risky - a.risky || b.hits - a.hits)[0]
+    : null;
+
+  return {
+    wisdomPct: pct(wisdomHits, wisdomGames),
+    wisdomGames,
+    darkHorsePct: pct(darkHorseHits, darkHorseGames),
+    darkHorseGames,
+    jockey,
+    gambler,
+  };
+}
+
 // --- Recent form ----------------------------------------------------------
 // A nation's recent results across all competitions, fetched from ESPN by
 // scripts/form.mjs and stored in `teams/{name}` docs. Display-only.

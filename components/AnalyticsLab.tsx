@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
-import { computePunterStats, type PunterStat } from '@/lib/data';
+import { computePunterStats, computeCrowdStats, type PunterStat } from '@/lib/data';
 import { Emoji, isDistortedFace, DISTORTED_FACE_SRC } from '@/components/Emoji';
 
 // Distinct line colours for the race. Warm/editorial palette that sits inside
@@ -16,7 +16,8 @@ const colorOf = (stats: PunterStat[], id: string) =>
 
 // Streak badge: 🔥 for a winning run, 🧊 for a losing run, with the count.
 const StreakBadge = ({ stat, className }: { stat: PunterStat; className?: string }) => {
-  if (stat.current.type === 'none' || stat.current.length === 0) return null;
+  // A single result isn't a streak — only surface a run once it reaches 2.
+  if (stat.current.type === 'none' || stat.current.length < 2) return null;
   const hot = stat.current.type === 'hot';
   return (
     <span
@@ -253,6 +254,9 @@ export const AnalyticsLab = ({ users, bets, matches, onBack }: any) => {
     [stats],
   );
 
+  // Group-betting tendencies (crowd wisdom, underdogs, risk-takers).
+  const crowd = useMemo(() => computeCrowdStats(users, bets, matches), [users, bets, matches]);
+
   return (
     <div className="w-full max-w-md mx-auto mt-8">
       {/* Header + back control */}
@@ -342,6 +346,51 @@ export const AnalyticsLab = ({ users, bets, matches, onBack }: any) => {
               tint="cold"
               primary={recordCold ? <>{recordCold.longestCold} picks</> : '—'}
               secondary={recordCold ? <><Emoji emoji={recordCold.avatar} /> {recordCold.name}</> : 'no slumps yet'}
+            />
+          </div>
+
+          {/* Crowd & risk */}
+          <div className="mb-3 font-mono text-[10px] uppercase tracking-widest text-paper/40 border-b border-chalk pb-2">
+            Crowd & Risk
+          </div>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <StatCard
+              label="Wisdom of the Crowd"
+              emoji="🧠"
+              tint="hot"
+              primary={crowd.wisdomPct !== null ? `${crowd.wisdomPct}%` : '—'}
+              secondary={crowd.wisdomGames > 0
+                ? `majority right · ${crowd.wisdomGames} game${crowd.wisdomGames === 1 ? '' : 's'}`
+                : 'no 4+ majorities yet'}
+            />
+            <StatCard
+              label="Dark Horse"
+              emoji="🐎"
+              tint="cold"
+              primary={crowd.darkHorsePct !== null ? `${crowd.darkHorsePct}%` : '—'}
+              secondary={crowd.darkHorseGames > 0
+                ? `underdog won · ${crowd.darkHorseGames} game${crowd.darkHorseGames === 1 ? '' : 's'}`
+                : 'no underdog races yet'}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3 mb-10">
+            <StatCard
+              label="Dark Jockey"
+              emoji="🏇"
+              tint="hot"
+              primary={crowd.jockey ? <><Emoji emoji={crowd.jockey.avatar} /> {crowd.jockey.name}</> : '—'}
+              secondary={crowd.jockey
+                ? `${crowd.jockey.hits} paid off · ${crowd.jockey.risky} risky bet${crowd.jockey.risky === 1 ? '' : 's'}`
+                : 'no risky bets yet'}
+            />
+            <StatCard
+              label="Gambler"
+              emoji="🎲"
+              tint="cold"
+              primary={crowd.gambler ? <><Emoji emoji={crowd.gambler.avatar} /> {crowd.gambler.name}</> : '—'}
+              secondary={crowd.gambler
+                ? `${crowd.gambler.risky} risky bet${crowd.gambler.risky === 1 ? '' : 's'} · ${Math.round((crowd.gambler.hits / crowd.gambler.risky) * 100)}% hit`
+                : 'no risky bets yet'}
             />
           </div>
 
