@@ -86,36 +86,38 @@ const placeTeam = (lineup: TeamLineup | null, side: 'home' | 'away') => {
 export const Pitch = ({ home, away, homeNote, awayNote }: {
   home: TeamLineup | null; away: TeamLineup | null; homeNote?: string; awayNote?: string;
 }) => (
-  <div
-    className="relative w-full aspect-[3/4] rounded-lg overflow-hidden border border-white/10"
-    style={{
-      background: 'repeating-linear-gradient(to bottom, #16271E 0 8.33%, #1B2E23 8.33% 16.66%)',
-      containerType: 'inline-size',
-    }}
-  >
+  <div className="w-full">
+    {/* Away's last opponent — behind the top (away) goal line, off-centre */}
     {awayNote && (
-      <div className="absolute top-1 left-1/2 -translate-x-1/2 z-10 text-[8px] md:text-[10px] font-mono text-paper/80 bg-pitch-900/70 px-2 py-0.5 rounded-full whitespace-nowrap">
-        {awayNote}
-      </div>
+      <div className="pb-1 pr-3 text-right font-mono text-[10px] md:text-xs text-paper/70 truncate">{awayNote}</div>
     )}
-    {homeNote && (
-      <div className="absolute bottom-1 left-1/2 -translate-x-1/2 z-10 text-[8px] md:text-[10px] font-mono text-paper/80 bg-pitch-900/70 px-2 py-0.5 rounded-full whitespace-nowrap">
-        {homeNote}
-      </div>
-    )}
-    {/* Markings */}
-    <svg viewBox="0 0 100 133" preserveAspectRatio="none" className="absolute inset-0 w-full h-full" stroke="rgba(255,255,255,0.22)" strokeWidth="0.4" fill="none">
-      <rect x="2" y="2" width="96" height="129" />
-      <line x1="2" y1="66.5" x2="98" y2="66.5" />
-      <circle cx="50" cy="66.5" r="11" />
-      <circle cx="50" cy="66.5" r="0.7" fill="rgba(255,255,255,0.22)" stroke="none" />
-      <rect x="22" y="2" width="56" height="17" />
-      <rect x="37" y="2" width="26" height="6" />
-      <rect x="22" y="114" width="56" height="17" />
-      <rect x="37" y="125" width="26" height="6" />
-    </svg>
 
-    {placeTeam(home, 'home')}
-    {placeTeam(away, 'away')}
+    <div
+      className="relative w-full aspect-[3/4] rounded-lg overflow-hidden border border-white/10"
+      style={{
+        background: 'repeating-linear-gradient(to bottom, #16271E 0 8.33%, #1B2E23 8.33% 16.66%)',
+        containerType: 'inline-size',
+      }}
+    >
+      {/* Markings */}
+      <svg viewBox="0 0 100 133" preserveAspectRatio="none" className="absolute inset-0 w-full h-full" stroke="rgba(255,255,255,0.22)" strokeWidth="0.4" fill="none">
+        <rect x="2" y="2" width="96" height="129" />
+        <line x1="2" y1="66.5" x2="98" y2="66.5" />
+        <circle cx="50" cy="66.5" r="11" />
+        <circle cx="50" cy="66.5" r="0.7" fill="rgba(255,255,255,0.22)" stroke="none" />
+        <rect x="22" y="2" width="56" height="17" />
+        <rect x="37" y="2" width="26" height="6" />
+        <rect x="22" y="114" width="56" height="17" />
+        <rect x="37" y="125" width="26" height="6" />
+      </svg>
+
+      {placeTeam(home, 'home')}
+      {placeTeam(away, 'away')}
+    </div>
+
+    {/* Home's last opponent — behind the bottom (home) goal line, off-centre */}
+    {homeNote && (
+      <div className="pt-1 pr-3 text-right font-mono text-[10px] md:text-xs text-paper/70 truncate">{homeNote}</div>
+    )}
   </div>
 );
