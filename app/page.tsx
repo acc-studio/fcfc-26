@@ -2,9 +2,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
-import { Match, Player, Pick, kickoffMs, BET_WINDOW_MS } from '@/lib/data';
+import { Match, Player, Pick, FormMatch, kickoffMs, BET_WINDOW_MS } from '@/lib/data';
 import { MatchCard } from '@/components/MatchCard';
 import { Leaderboard } from '@/components/Leaderboard';
+import { Groups } from '@/components/Groups';
 import { auth, db } from '@/lib/firebase';
 import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { AuthModal } from '@/components/AuthModal';
@@ -12,7 +13,7 @@ import { RegisterModal } from '@/components/RegisterModal';
 import { ArbiterModal } from '@/components/ArbiterModal';
 
 export default function WorldCupApp() {
-  const [activeTab, setActiveTab] = useState<'next' | 'upcoming' | 'past' | 'table'>('next');
+  const [activeTab, setActiveTab] = useState<'next' | 'upcoming' | 'past' | 'groups' | 'table'>('next');
 
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [authModal, setAuthModal] = useState<{ isOpen: boolean; target: Player | null }>({
@@ -26,6 +27,8 @@ export default function WorldCupApp() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [bets, setBets] = useState<Record<string, any>>({});
+  // Recent form by canonical team name, from the `teams` collection.
+  const [teamForm, setTeamForm] = useState<Record<string, FormMatch[]>>({});
   const [isLoading, setIsLoading] = useState(true);
   // Refreshed every minute so the 48h betting window closes live.
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -63,12 +66,23 @@ export default function WorldCupApp() {
       setPlayers(rows);
     });
 
+    // Recent form: `teams/{name}` -> { name, form[] }, keyed by team name.
+    const unsubTeams = onSnapshot(collection(db, 'teams'), (snap) => {
+      const map: Record<string, FormMatch[]> = {};
+      snap.docs.forEach((d) => {
+        const row = d.data() as { name?: string; form?: FormMatch[] };
+        if (Array.isArray(row.form)) map[row.name ?? d.id] = row.form;
+      });
+      setTeamForm(map);
+    });
+
     const tick = setInterval(() => setNowMs(Date.now()), 60_000);
 
     return () => {
       unsubMatches();
       unsubBets();
       unsubPlayers();
+      unsubTeams();
       clearInterval(tick);
     };
   }, []);
@@ -314,6 +328,8 @@ export default function WorldCupApp() {
                       onReopen={handleReopenResult}
                       activeUser={currentUser || ''}
                       isArbiter={isArbiter}
+                      homeForm={teamForm[match.home]}
+                      awayForm={teamForm[match.away]}
                       locked={nowMs >= kickoffMs(match)}
                     />
                   ))
@@ -347,6 +363,8 @@ export default function WorldCupApp() {
                       onReopen={handleReopenResult}
                       activeUser={currentUser || ''}
                       isArbiter={isArbiter}
+                      homeForm={teamForm[match.home]}
+                      awayForm={teamForm[match.away]}
                       notYetOpen
                     />
                   ))
@@ -380,10 +398,24 @@ export default function WorldCupApp() {
                       onReopen={handleReopenResult}
                       activeUser={currentUser || ''}
                       isArbiter={isArbiter}
+                      homeForm={teamForm[match.home]}
+                      awayForm={teamForm[match.away]}
                       locked
                     />
                   ))
                 )}
+              </motion.div>
+            )}
+
+            {activeTab === 'groups' && (
+              <motion.div
+                key="groups"
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                transition={{ duration: 0.3 }}
+              >
+                <Groups matches={matches} />
               </motion.div>
             )}
 
@@ -411,7 +443,7 @@ export default function WorldCupApp() {
           <button
             onClick={() => setActiveTab('next')}
             className={clsx(
-              "flex-1 py-6 text-center font-mono text-[11px] uppercase tracking-wide transition-colors relative",
+              "flex-1 py-6 text-center font-mono text-[10px] md:text-[11px] uppercase tracking-wide transition-colors relative whitespace-nowrap",
               activeTab === 'next' ? "text-gold" : "text-paper/40 hover:text-paper"
             )}
           >
@@ -427,7 +459,7 @@ export default function WorldCupApp() {
           <button
             onClick={() => setActiveTab('upcoming')}
             className={clsx(
-              "flex-1 py-6 text-center font-mono text-[11px] uppercase tracking-wide transition-colors relative",
+              "flex-1 py-6 text-center font-mono text-[10px] md:text-[11px] uppercase tracking-wide transition-colors relative whitespace-nowrap",
               activeTab === 'upcoming' ? "text-gold" : "text-paper/40 hover:text-paper"
             )}
           >
@@ -443,7 +475,7 @@ export default function WorldCupApp() {
           <button
             onClick={() => setActiveTab('past')}
             className={clsx(
-              "flex-1 py-6 text-center font-mono text-[11px] uppercase tracking-wide transition-colors relative",
+              "flex-1 py-6 text-center font-mono text-[10px] md:text-[11px] uppercase tracking-wide transition-colors relative whitespace-nowrap",
               activeTab === 'past' ? "text-gold" : "text-paper/40 hover:text-paper"
             )}
           >
@@ -455,11 +487,27 @@ export default function WorldCupApp() {
 
           <div className="w-px bg-chalk my-4 opacity-50"></div>
 
+          {/* Groups Tab */}
+          <button
+            onClick={() => setActiveTab('groups')}
+            className={clsx(
+              "flex-1 py-6 text-center font-mono text-[10px] md:text-[11px] uppercase tracking-wide transition-colors relative whitespace-nowrap",
+              activeTab === 'groups' ? "text-gold" : "text-paper/40 hover:text-paper"
+            )}
+          >
+            Groups
+            {activeTab === 'groups' && (
+              <motion.div layoutId="nav-indicator" className="absolute bottom-2 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-gold" />
+            )}
+          </button>
+
+          <div className="w-px bg-chalk my-4 opacity-50"></div>
+
           {/* Standings Tab */}
           <button
             onClick={() => setActiveTab('table')}
             className={clsx(
-              "flex-1 py-6 text-center font-mono text-[11px] uppercase tracking-wide transition-colors relative",
+              "flex-1 py-6 text-center font-mono text-[10px] md:text-[11px] uppercase tracking-wide transition-colors relative whitespace-nowrap",
               activeTab === 'table' ? "text-gold" : "text-paper/40 hover:text-paper"
             )}
           >

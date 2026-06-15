@@ -61,6 +61,13 @@ service cloud.firestore {
       allow delete: if isArbiter();
     }
 
+    // Recent form: world-readable; written only by the form job (arbiter).
+    match /teams/{teamId} {
+      allow read: if true;
+      allow create, update: if isArbiter();
+      allow delete: if false;
+    }
+
     // Bets: world-readable (leaderboard + social reveal). Writes require auth and
     // a valid outcome shape; deletes are arbiter-only (the wipe-bets script).
     match /bets/{betId} {

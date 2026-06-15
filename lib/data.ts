@@ -85,6 +85,78 @@ export function betOutcome(pick: Pick | undefined, resultHome?: number, resultAw
   return pick === actual ? 'win' : 'loss';
 }
 
+// --- Recent form ----------------------------------------------------------
+// A nation's recent results across all competitions, fetched from ESPN by
+// scripts/form.mjs and stored in `teams/{name}` docs. Display-only.
+export interface FormMatch {
+  date: string;        // "2026-06-13"
+  opponent: string;    // full opponent name (may be a non-WC nation)
+  gf: number;          // goals for (this team)
+  ga: number;          // goals against
+  result: 'W' | 'D' | 'L';
+  competition: string; // e.g. "FIFA World Cup", "Men's International Friendly"
+}
+export interface TeamForm {
+  name: string;        // canonical team name (matches TEAM_ISO / fixtures)
+  form: FormMatch[];   // most-recent first; render reversed so newest is rightmost
+  updatedAt?: string;
+}
+
+// --- Group stage ----------------------------------------------------------
+// The 12 groups of the 2026 final draw (Dec 5 2025), in canonical names that
+// match the fixtures/TEAM_ISO. Standings are computed from our own results.
+export const GROUPS: Record<string, string[]> = {
+  A: ['Mexico', 'Czechia', 'South Korea', 'South Africa'],
+  B: ['Canada', 'Bosnia and Herzegovina', 'Switzerland', 'Qatar'],
+  C: ['Brazil', 'Scotland', 'Haiti', 'Morocco'],
+  D: ['Paraguay', 'Türkiye', 'Australia', 'USA'],
+  E: ['Ecuador', 'Germany', 'Ivory Coast', 'Curaçao'],
+  F: ['Netherlands', 'Sweden', 'Japan', 'Tunisia'],
+  G: ['Belgium', 'Iran', 'Egypt', 'New Zealand'],
+  H: ['Spain', 'Uruguay', 'Saudi Arabia', 'Cape Verde'],
+  I: ['Norway', 'France', 'Senegal', 'Iraq'],
+  J: ['Argentina', 'Austria', 'Algeria', 'Jordan'],
+  K: ['Colombia', 'Portugal', 'Uzbekistan', 'DR Congo'],
+  L: ['England', 'Croatia', 'Panama', 'Ghana'],
+};
+
+export interface Standing {
+  team: string;
+  p: number; w: number; d: number; l: number;
+  gf: number; ga: number; gd: number; pts: number;
+}
+
+// Group table from finished matches. Pass all matches — only those between two
+// of `teams` count. Sorted by points, then GD, then GF (a display-level subset
+// of FIFA's tiebreakers; head-to-head etc. are not applied).
+export function computeStandings(teams: string[], matches: Match[]): Standing[] {
+  const table = new Map<string, Standing>(
+    teams.map(t => [t, { team: t, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, gd: 0, pts: 0 }])
+  );
+  for (const m of matches) {
+    if (m.status !== 'FINISHED' || m.result_home === undefined || m.result_away === undefined) continue;
+    const H = table.get(m.home), A = table.get(m.away);
+    if (!H || !A) continue; // not an intra-group match
+    H.p++; A.p++;
+    H.gf += m.result_home; H.ga += m.result_away;
+    A.gf += m.result_away; A.ga += m.result_home;
+    if (m.result_home > m.result_away) { H.w++; A.l++; H.pts += 3; }
+    else if (m.result_home < m.result_away) { A.w++; H.l++; A.pts += 3; }
+    else { H.d++; A.d++; H.pts++; A.pts++; }
+  }
+  const rows = [...table.values()];
+  rows.forEach(s => { s.gd = s.gf - s.ga; });
+  rows.sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf || a.team.localeCompare(b.team));
+  return rows;
+}
+
+// Finished matches played between two teams of the given group, in schedule order.
+export function groupMatches(teams: string[], matches: Match[]): Match[] {
+  return matches
+    .filter(m => m.status === 'FINISHED' && teams.includes(m.home) && teams.includes(m.away))
+    .sort((a, b) => a.id - b.id);
+}
+
 // Map Country Name -> ISO Code for FlagCDN.
 // Keys MUST match the team names used in the fixtures seed (scripts/seed.mjs)
 // exactly, otherwise the flag falls back to a "?" swatch.

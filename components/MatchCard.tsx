@@ -3,13 +3,58 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
 import { ScoreDial } from './ScoreDial';
-import { Match, Player, Pick, MatchEvent, TEAM_ISO, betOutcome } from '@/lib/data';
+import { Match, Player, Pick, MatchEvent, FormMatch, betOutcome } from '@/lib/data';
+import { Flag } from './Flag';
 
 // Glyph for a live/finished match event (goals + red cards from the poller).
 const EVENT_ICON: Record<MatchEvent['kind'], string> = {
   goal: '⚽', penalty: '⚽', 'own-goal': '⚽', red: '🟥',
 };
 const eventSuffix = (k: MatchEvent['kind']) => k === 'own-goal' ? ' (OG)' : k === 'penalty' ? ' (P)' : '';
+
+// Colour for a W/D/L form result.
+const FORM_COLOR: Record<FormMatch['result'], string> = {
+  W: 'bg-green-500', D: 'bg-yellow-500', L: 'bg-red-500',
+};
+
+// The 5 W/D/L squares, newest on the right (form arrives most-recent-first).
+const FormDots = ({ form }: { form?: FormMatch[] }) => {
+  if (!form || form.length === 0) return <span className="font-mono text-[9px] text-paper/30">—</span>;
+  return (
+    <span className="inline-flex gap-1">
+      {[...form].slice(0, 5).reverse().map((f, i) => (
+        <span
+          key={i}
+          title={`${f.result} ${f.gf}-${f.ga} vs ${f.opponent}`}
+          className={clsx("w-2.5 h-2.5 md:w-3 md:h-3 rounded-[2px]", FORM_COLOR[f.result])}
+        />
+      ))}
+    </span>
+  );
+};
+
+// Expanded last-5 list for one team (shown when the form strip is tapped).
+const FormList = ({ team, form }: { team: string; form?: FormMatch[] }) => (
+  <div className="flex-1 min-w-0">
+    <div className="flex items-center gap-1.5 mb-1">
+      <Flag team={team} className="w-4 h-3 flex-shrink-0" />
+      <span className="font-mono text-[10px] uppercase tracking-widest text-paper/60 truncate">{team}</span>
+    </div>
+    {(!form || form.length === 0) ? (
+      <p className="font-mono text-[9px] text-paper/30">No recent data</p>
+    ) : (
+      <div className="flex flex-col gap-0.5">
+        {form.map((f, i) => (
+          <div key={i} className="flex items-center gap-1.5 font-mono text-[10px] text-paper/70">
+            <span className={clsx("w-2 h-2 rounded-[1px] shrink-0", FORM_COLOR[f.result])} />
+            <span className="tabular-nums shrink-0">{f.gf}-{f.ga}</span>
+            <span className="truncate text-paper/50">v {f.opponent}</span>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+);
 
 interface MatchCardProps {
   match: Match;
@@ -25,31 +70,19 @@ interface MatchCardProps {
   locked?: boolean;
   // Future fixture outside the 48h window — betting hasn't opened yet.
   notYetOpen?: boolean;
+  // Recent form (last 5, most-recent first) for each side, from the `teams` feed.
+  homeForm?: FormMatch[];
+  awayForm?: FormMatch[];
 }
-
-// Small flag image (used in team rows and the See Bets list).
-const Flag = ({ team, className }: { team: string, className?: string }) => {
-  const code = TEAM_ISO[team];
-  if (!code) {
-    return <span className={clsx("inline-flex items-center justify-center bg-gray-700 rounded-sm text-[8px]", className)}>?</span>;
-  }
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={`https://flagcdn.com/w80/${code}.png`}
-      srcSet={`https://flagcdn.com/w160/${code}.png 2x`}
-      alt={team}
-      className={clsx("object-cover rounded-[2px] border border-white/10", className)}
-    />
-  );
-};
 
 export const MatchCard = ({
   match, userBets, players, onPick, onLockIn, onSetResult, onReopen,
   activeUser, isArbiter, locked = false, notYetOpen = false,
+  homeForm, awayForm,
 }: MatchCardProps) => {
   const [adminScore, setAdminScore] = useState({ home: 0, away: 0 });
   const [showBets, setShowBets] = useState(false);
+  const [showForm, setShowForm] = useState(false);
 
   const betKey = `${activeUser}_${match.id}`;
   const myBet = userBets[betKey];
@@ -182,6 +215,29 @@ export const MatchCard = ({
             <Flag team={match.away} className="flex-shrink-0 w-6 h-4 md:w-9 md:h-6 ml-2 md:ml-3" />
           </button>
         </div>
+
+        {/* Recent form — W/D/L squares per side; tap to expand last-5 scorelines */}
+        {(homeForm?.length || awayForm?.length) ? (
+          <div className="relative z-10">
+            <button
+              type="button"
+              onClick={() => setShowForm(s => !s)}
+              className="w-full px-4 md:px-8 pb-2 flex items-center justify-between gap-2 select-none touch-manipulation cursor-pointer"
+            >
+              <FormDots form={homeForm} />
+              <span className="font-mono text-[8px] uppercase tracking-[0.2em] text-paper/30">
+                Form {showForm ? '▾' : '▸'}
+              </span>
+              <FormDots form={awayForm} />
+            </button>
+            {showForm && (
+              <div className="px-4 md:px-8 pb-3 flex gap-4 border-t border-dashed border-white/5 pt-2">
+                <FormList team={match.home} form={homeForm} />
+                <FormList team={match.away} form={awayForm} />
+              </div>
+            )}
+          </div>
+        ) : null}
 
         {/* Goalscorers / red cards (live + finished) */}
         {match.events && match.events.length > 0 && (
