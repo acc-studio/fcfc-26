@@ -1,5 +1,44 @@
+'use client';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { clsx } from 'clsx';
 import { TeamLineup, LineupPlayer } from '@/lib/espn';
+
+const useIso = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
+
+// A single-line player name that shrinks its font to fit the chip width instead
+// of ellipsing. Base size is the cqw clamp below; it only scales down if needed.
+const PitchName = ({ name }: { name: string }) => {
+  const box = useRef<HTMLSpanElement>(null);
+  const txt = useRef<HTMLSpanElement>(null);
+  useIso(() => {
+    const container = box.current, el = txt.current;
+    if (!container || !el) return;
+    const fit = () => {
+      el.style.fontSize = '';
+      const avail = container.clientWidth;
+      if (!avail) return;
+      const base = parseFloat(getComputedStyle(el).fontSize);
+      let size = base, guard = 0;
+      el.style.fontSize = `${size}px`;
+      while (guard++ < 28 && size > base * 0.4 && el.scrollWidth > avail + 1) {
+        size = Math.max(base * 0.4, size - base * 0.04);
+        el.style.fontSize = `${size}px`;
+      }
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(container);
+    document.fonts?.ready.then(fit).catch(() => {});
+    return () => ro.disconnect();
+  }, [name]);
+  return (
+    <span ref={box} className="mt-1 w-full overflow-hidden text-center">
+      <span ref={txt} className="inline-block whitespace-nowrap leading-tight text-paper text-[clamp(10px,3.3cqw,20px)] [text-shadow:0_1px_3px_rgba(0,0,0,0.9)]">
+        {name}
+      </span>
+    </span>
+  );
+};
 
 // Draws both XIs on a vertical pitch: home defends the bottom (attacks up), away
 // defends the top. Players are laid out from the formation string ("4-2-3-1")
@@ -61,12 +100,7 @@ const Chip = ({ p, x, y, side }: { p: LineupPlayer; x: number; y: number; side: 
     )}>
       {p.jersey}
     </div>
-    <span
-      title={p.name}
-      className="mt-1 leading-tight text-paper text-center truncate w-full text-[clamp(10px,3.3cqw,20px)] [text-shadow:0_1px_3px_rgba(0,0,0,0.9)]"
-    >
-      {surname(p.name)}
-    </span>
+    <PitchName name={surname(p.name)} />
   </div>
 );
 
