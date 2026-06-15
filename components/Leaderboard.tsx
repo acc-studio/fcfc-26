@@ -1,26 +1,23 @@
 'use client';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
-import { betOutcome } from '@/lib/data';
+import { computePunterStats } from '@/lib/data';
+import { AnalyticsLab, StreakBadge } from '@/components/AnalyticsLab';
+import { Emoji } from '@/components/Emoji';
 
 export const Leaderboard = ({ users, bets, matches }: any) => {
-  const scores = useMemo(() => {
-    return users.map((user: any) => {
-      let points = 0;
+  const [showLab, setShowLab] = useState(false);
 
-      matches.filter((m: any) => m.status === 'FINISHED').forEach((match: any) => {
-        const bet = bets[`${user.id}_${match.id}`];
-        if (!bet?.pick) return;
-        // 1 point for a correct outcome.
-        if (betOutcome(bet.pick, match.result_home, match.result_away) === 'win') {
-          points += 1;
-        }
-      });
+  const { stats } = useMemo(
+    () => computePunterStats(users, bets, matches),
+    [users, bets, matches],
+  );
+  const scores = useMemo(() => [...stats].sort((a, b) => b.points - a.points), [stats]);
 
-      return { ...user, points };
-    }).sort((a: any, b: any) => b.points - a.points);
-  }, [users, bets, matches]);
+  if (showLab) {
+    return <AnalyticsLab users={users} bets={bets} matches={matches} onBack={() => setShowLab(false)} />;
+  }
 
   return (
     <div className="w-full max-w-md mx-auto mt-12">
@@ -40,13 +37,22 @@ export const Leaderboard = ({ users, bets, matches }: any) => {
           >
             <div className="flex items-center gap-3">
               <span className="font-serif text-lg w-6 text-paper/50">{idx + 1}.</span>
-              <span className="text-xl">{user.avatar}</span>
+              <span className="text-xl"><Emoji emoji={user.avatar} /></span>
               <span className={clsx("font-sans font-bold text-sm", idx === 0 ? "text-gold" : "text-paper")}>{user.name}</span>
+              <StreakBadge stat={user} />
             </div>
             <span className="font-mono text-sm text-gold font-bold w-8 text-center">{user.points}</span>
           </motion.div>
         ))}
       </div>
+
+      <button
+        onClick={() => setShowLab(true)}
+        className="mt-8 w-full border border-gold/50 bg-gold/5 hover:bg-gold/15 text-gold font-mono text-[11px] uppercase tracking-widest leading-relaxed py-6 px-4 rounded transition-colors flex items-center justify-center gap-2"
+      >
+        <span className="text-base">🧪</span>
+        Advanced FCFC Football Analytics Lab
+      </button>
     </div>
   );
 };

@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import { Player } from '@/lib/data';
+import { Emoji } from './Emoji';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -62,7 +63,7 @@ export const AuthModal = ({ isOpen, targetUser, onClose, onSuccess }: AuthModalP
           >
             <div className="flex flex-col items-center gap-6">
               <div className="text-center">
-                <div className="text-4xl mb-2">{targetUser.avatar}</div>
+                <div className="text-4xl mb-2"><Emoji emoji={targetUser.avatar} /></div>
                 <h3 className="font-serif text-2xl text-paper">Identity Check</h3>
                 <p className="font-mono text-[10px] uppercase text-gold tracking-widest mt-1">
                   Enter PIN for {targetUser.name}

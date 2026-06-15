@@ -85,6 +85,66 @@ export function betOutcome(pick: Pick | undefined, resultHome?: number, resultAw
   return pick === actual ? 'win' : 'loss';
 }
 
+// --- Punter analytics -----------------------------------------------------
+// Everything the "Advanced FCFC Football Analytics Lab" needs, derived purely
+// from finished matches + each punter's committed picks. No home/away or
+// "betting %" nonsense — in a World Cup there's rarely a home side and everyone
+// bets every match, so those metrics carry no signal. We track the race
+// (cumulative points over time) and win/loss streaks instead.
+export interface PunterStreak {
+  type: 'hot' | 'cold' | 'none';   // hot = on a winning run, cold = losing run
+  length: number;
+}
+export interface PunterStat {
+  id: string;
+  name: string;
+  avatar: string;
+  points: number;
+  current: PunterStreak;   // the streak they're riding right now
+  longestHot: number;      // longest winning run this punter has ever had
+  longestCold: number;     // longest losing run this punter has ever had
+  timeline: number[];      // cumulative points after each finished match (index 0 = 0)
+}
+
+// Finished matches in chronological (kickoff) order — the x-axis of the race.
+export function finishedInOrder(matches: Match[]): Match[] {
+  return matches
+    .filter(m => m.status === 'FINISHED' && m.result_home !== undefined && m.result_away !== undefined)
+    .sort((a, b) => kickoffMs(a) - kickoffMs(b) || a.id - b.id);
+}
+
+// Per-punter race timeline + streaks. A correct pick extends a hot streak and
+// scores a point; a wrong pick extends a cold streak; a match with no committed
+// pick is skipped (neither extends nor breaks the run).
+export function computePunterStats(
+  users: Player[],
+  bets: Record<string, Bet | undefined>,
+  matches: Match[],
+): { finished: Match[]; stats: PunterStat[] } {
+  const finished = finishedInOrder(matches);
+  const stats = users.map(u => {
+    let points = 0, longestHot = 0, longestCold = 0;
+    let runType: 'hot' | 'cold' | null = null, runLen = 0;
+    const timeline: number[] = [0];
+    for (const m of finished) {
+      const bet = bets[`${u.id}_${m.id}`];
+      const out = bet?.pick ? betOutcome(bet.pick, m.result_home, m.result_away) : 'none';
+      if (out === 'win') {
+        points += 1;
+        if (runType === 'hot') runLen++; else { runType = 'hot'; runLen = 1; }
+        if (runLen > longestHot) longestHot = runLen;
+      } else if (out === 'loss') {
+        if (runType === 'cold') runLen++; else { runType = 'cold'; runLen = 1; }
+        if (runLen > longestCold) longestCold = runLen;
+      }
+      timeline.push(points);
+    }
+    const current: PunterStreak = runType ? { type: runType, length: runLen } : { type: 'none', length: 0 };
+    return { id: u.id, name: u.name, avatar: u.avatar, points, current, longestHot, longestCold, timeline };
+  });
+  return { finished, stats };
+}
+
 // --- Recent form ----------------------------------------------------------
 // A nation's recent results across all competitions, fetched from ESPN by
 // scripts/form.mjs and stored in `teams/{name}` docs. Display-only.

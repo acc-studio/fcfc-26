@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import { Match, Player, Pick, FormMatch, kickoffMs, BET_WINDOW_MS } from '@/lib/data';
 import { MatchCard } from '@/components/MatchCard';
+import { Emoji } from '@/components/Emoji';
 import { Leaderboard } from '@/components/Leaderboard';
 import { Groups } from '@/components/Groups';
 import { auth, db } from '@/lib/firebase';
@@ -268,7 +269,7 @@ export default function WorldCupApp() {
                     disabled={active}
                     className={clsx("flex items-center gap-2 py-2 pl-4", active ? "pr-2 cursor-default" : "pr-4")}
                   >
-                    <span>{p.avatar}</span> {p.name}
+                    <Emoji emoji={p.avatar} /> {p.name}
                   </button>
                   {active && (
                     <button

@@ -6,6 +6,7 @@ import { Match, Player, Pick, MatchEvent, FormMatch, betOutcome } from '@/lib/da
 import { Flag } from './Flag';
 import { FitText } from './FitText';
 import { LineupModal } from './LineupModal';
+import { Emoji } from './Emoji';
 
 // Glyph for a live/finished match event (goals + red cards from the poller).
 const EVENT_ICON: Record<MatchEvent['kind'], string> = {
@@ -343,7 +344,7 @@ export const MatchCard = ({
                         return (
                           <div key={p.id} className="flex items-center justify-between bg-black/20 rounded px-2.5 py-1.5">
                             <span className="flex items-center gap-2 min-w-0">
-                              <span>{p.avatar}</span>
+                              <Emoji emoji={p.avatar} />
                               <span className="font-mono text-xs text-paper/80 truncate">{p.name}</span>
                             </span>
                             <span className={clsx(

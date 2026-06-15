@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import { AVATARS } from '@/lib/data';
+import { Emoji } from './Emoji';
 
 // Take just the first emoji/grapheme of whatever the user types or pastes,
 // so multi-codepoint emoji (👨‍👩‍👧, flags) survive intact.
@@ -79,7 +80,7 @@ export const RegisterModal = ({ isOpen, existingNames, onClose, onCreate }: Regi
           >
             <form onSubmit={handleSubmit} className="flex flex-col items-center gap-6">
               <div className="text-center">
-                <div className="text-4xl mb-2">{avatar}</div>
+                <div className="text-4xl mb-2"><Emoji emoji={avatar} /></div>
                 <h3 className="font-serif text-2xl text-paper">New Punter</h3>
                 <p className="font-mono text-[10px] uppercase text-gold tracking-widest mt-1">
                   Claim your spot
@@ -111,7 +112,7 @@ export const RegisterModal = ({ isOpen, existingNames, onClose, onCreate }: Regi
                         avatar === a ? "border-gold bg-gold/10" : "border-chalk hover:border-gold/50"
                       )}
                     >
-                      {a}
+                      <Emoji emoji={a} />
                     </button>
                   ))}
                 </div>
