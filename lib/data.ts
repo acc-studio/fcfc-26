@@ -154,6 +154,18 @@ const MAJORITY = 4;   // a clear majority of the 6-player group
 const FAVORITE = 3;   // the crowd's favourite option
 const UNDERDOG = 2;   // an underdog option draws at most this many backers
 
+// Wilson score lower bound (95%, z=1.96) on the success rate `hits/total`. A
+// confidence-adjusted hit rate: it returns the bottom of the interval, so a
+// small sample is penalised (1/1 → 0.21) while a larger one at the same rate
+// scores higher. 0 hits (or no bets) → 0. Used to rank the Dark Jockey.
+function wilsonLower(hits: number, total: number): number {
+  if (total <= 0) return 0;
+  const z = 1.96;
+  const p = hits / total;
+  return (p + (z * z) / (2 * total) - z * Math.sqrt((p * (1 - p) + (z * z) / (4 * total)) / total))
+    / (1 + (z * z) / total);
+}
+
 export interface RiskRecord {
   id: string;
   name: string;
@@ -166,7 +178,7 @@ export interface CrowdStats {
   wisdomGames: number;        // games that had a qualifying majority
   darkHorsePct: number | null; // % of underdog-situation games the underdog won
   darkHorseGames: number;      // games where an underdog option existed
-  jockey: RiskRecord | null;   // most paid-off risky bets
+  jockey: RiskRecord | null;   // sharpest underdog-caller: best hit rate on risky bets
   gambler: RiskRecord | null;  // most risky bets overall
 }
 
@@ -222,9 +234,19 @@ export function computeCrowdStats(
 
   const pct = (hit: number, total: number) => (total > 0 ? Math.round((hit / total) * 100) : null);
   const riskers = Object.values(record).filter(r => r.risky > 0);
-  const jockey = riskers.length
-    ? [...riskers].sort((a, b) => b.hits - a.hits || b.risky - a.risky)[0]
+  // Dark Jockey = the sharpest underdog-caller. Ranking by raw hit rate is no
+  // good with tiny samples (1/1 would beat 3/4), and ranking by raw count just
+  // rewards volume (that's the Gambler). So we score each punter by the Wilson
+  // score lower bound on their risky-bet hit rate: it shrinks small samples
+  // toward zero, so you need both a strong rate *and* enough evidence to top
+  // the list. This yields 3/4 > 1/1 (low confidence) and 3/4 > 4/10 (weak rate).
+  const callers = riskers.filter(r => r.hits > 0);
+  const jockey = callers.length
+    ? [...callers].sort((a, b) =>
+        wilsonLower(b.hits, b.risky) - wilsonLower(a.hits, a.risky)
+        || b.hits - a.hits || a.risky - b.risky)[0]
     : null;
+  // Gambler = the most prolific risk-taker by raw volume, win or lose.
   const gambler = riskers.length
     ? [...riskers].sort((a, b) => b.risky - a.risky || b.hits - a.hits)[0]
     : null;

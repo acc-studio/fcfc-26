@@ -380,8 +380,8 @@ export const AnalyticsLab = ({ users, bets, matches, onBack }: any) => {
               tint="hot"
               primary={crowd.jockey ? <><Emoji emoji={crowd.jockey.avatar} /> {crowd.jockey.name}</> : '—'}
               secondary={crowd.jockey
-                ? `${crowd.jockey.hits} paid off · ${crowd.jockey.risky} risky bet${crowd.jockey.risky === 1 ? '' : 's'}`
-                : 'no risky bets yet'}
+                ? `${Math.round((crowd.jockey.hits / crowd.jockey.risky) * 100)}% hit · ${crowd.jockey.hits}/${crowd.jockey.risky} risky paid off`
+                : 'no dark horses called yet'}
             />
             <StatCard
               label="Gambler"
