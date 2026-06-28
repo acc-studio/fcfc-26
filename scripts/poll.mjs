@@ -20,13 +20,23 @@
 import { collection, getDocs, doc, updateDoc, deleteField } from 'firebase/firestore';
 import { connectAsArbiter } from './connect.mjs';
 
-// No arg -> today's scoreboard (the cron's normal mode). Pass a date to backfill
-// past games' scores/scorers, e.g. `node scripts/poll.mjs 20260611` or a range
-// `20260611-20260612` (ESPN uses YYYYMMDD). Finished games whose events were
-// never captured (e.g. finalized manually before the poller existed) get filled.
+// No arg -> a rolling window from today to +5 days (the cron's normal mode).
+// The look-ahead matters for the knockout bracket-fill: ESPN lists a fixture's
+// teams as soon as the feeding round finishes, so polling a few days ahead fills
+// our slots with the real qualifiers *before* they enter the 48h betting window
+// (the bare scoreboard only returns today, which would be too late to bet). The
+// window deliberately starts at today, never earlier, so the cron can't re-write
+// (and clobber an arbiter override on) an already-finished past match. Pass an
+// explicit date/range to backfill past games, e.g. `node scripts/poll.mjs
+// 20260611` or `20260611-20260612` (ESPN uses YYYYMMDD); one request covers it.
 const dateArg = process.argv[2];
-const ESPN_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard'
-  + (dateArg ? `?dates=${dateArg}` : '');
+const ymd = (ms) => {
+  const d = new Date(ms);
+  return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
+};
+const DAY = 86400000;
+const dates = dateArg || `${ymd(Date.now())}-${ymd(Date.now() + 5 * DAY)}`;
+const ESPN_URL = `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${dates}`;
 
 // ESPN's display name -> our canonical team name (the names used in the seed /
 // TEAM_ISO). Only the ones that differ after normalization need an entry; the
