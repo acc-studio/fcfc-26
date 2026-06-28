@@ -59,6 +59,16 @@ function norm(s) {
 const pairKey = (a, b) => [norm(a), norm(b)].sort().join('|');
 const canonical = (espnName) => ALIASES[espnName] ?? espnName;
 
+const MONTH_INDEX = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+// Kickoff as UTC ms from our stored Turkey-time (UTC+3) strings — mirrors
+// lib/data.kickoffMs. Used to match a knockout fixture to its bracket slot.
+function kickoffMs(m) {
+  const [mon, day] = String(m.date).split(' ');
+  const [hh, mm] = String(m.time).split(':').map(Number);
+  return Date.UTC(2026, MONTH_INDEX[mon] ?? 0, Number(day), hh - 3, mm);
+}
+const isKnockout = (m) => m.stage && m.stage !== 'GROUP';
+
 function eventKind(d) {
   if (d.ownGoal) return 'own-goal';
   if (d.redCard) return 'red';
@@ -74,16 +84,52 @@ async function main() {
 
   const { db, cleanup } = await connectAsArbiter();
 
-  // Index our fixtures by the unordered normalized team pair.
+  // Index our fixtures by the unordered normalized team pair; keep the knockout
+  // slots aside for the bracket-fill pass below.
   const snap = await getDocs(collection(db, 'matches'));
   const byPair = new Map();
+  const koSlots = [];
   snap.forEach((d) => {
     const m = d.data();
     byPair.set(pairKey(m.home, m.away), m);
+    if (isKnockout(m)) koSlots.push(m);
   });
 
   let updated = 0, live = 0, finalized = 0;
   const unmatched = [];
+
+  // --- Bracket-fill pass: as ESPN schedules each knockout fixture, write the
+  // real qualifiers into our slot (which starts as a placeholder label). Match a
+  // game to a slot by kickoff time (the schedules share a source, so they line
+  // up to the minute); adopt ESPN's home/away orientation. Runs for any game
+  // state — teams are known once the fixture appears, before kickoff.
+  for (const g of games) {
+    const competitors = g.competitions?.[0]?.competitors || [];
+    if (competitors.length !== 2) continue;
+    const startMs = Date.parse(g.date);
+    if (Number.isNaN(startMs)) continue;
+
+    let slot = null, best = 2 * 60 * 60 * 1000; // 2h tolerance, nearest wins
+    for (const m of koSlots) {
+      const dt = Math.abs(kickoffMs(m) - startMs);
+      if (dt <= best) { best = dt; slot = m; }
+    }
+    if (!slot) continue;
+
+    const homeC = competitors.find(c => c.homeAway === 'home') || competitors[0];
+    const awayC = competitors.find(c => c.homeAway === 'away') || competitors[1];
+    const home = canonical(homeC.team?.displayName);
+    const away = canonical(awayC.team?.displayName);
+    if (!home || !away) continue;
+    if (norm(home) === norm(slot.home) && norm(away) === norm(slot.away)) continue; // already set
+
+    await updateDoc(doc(db, 'matches', String(slot.id)), { home, away });
+    console.log(`#${slot.id} ${slot.stage} ${slot.home} v ${slot.away} -> ${home} v ${away}`);
+    byPair.delete(pairKey(slot.home, slot.away));
+    slot.home = home; slot.away = away;
+    byPair.set(pairKey(home, away), slot);
+    updated++;
+  }
 
   for (const g of games) {
     const state = g.status?.type?.state; // 'pre' | 'in' | 'post'
@@ -130,13 +176,43 @@ async function main() {
     const isFinal = state === 'post';
     const minute = (g.status?.type?.shortDetail || g.status?.displayClock || '').trim();
 
+    // Knockout final: capture who advanced (survives ET/penalties; ESPN flags
+    // the winner) plus the shootout tally/takers when the match went to spot
+    // kicks. This — not the level scoreline — is what the app scores.
+    let advance, shootout;
+    if (isKnockout(match) && isFinal) {
+      const winC = competitors.find(c => c.winner === true);
+      if (winC) advance = sideByTeamId[winC.team?.id];
+      if (competitors.some(c => c.shootoutScore != null)) {
+        let sh = 0, sa = 0;
+        for (const c of competitors) {
+          const v = Number(c.shootoutScore) || 0;
+          if (sideByTeamId[c.team?.id] === 'HOME') sh = v; else sa = v;
+        }
+        const takers = (comp.details || [])
+          .filter((d) => d.shootout)
+          .map((d) => {
+            const side = sideByTeamId[d.team?.id];
+            if (!side) return null;
+            const ath = d.athletesInvolved?.[0];
+            return { player: ath?.displayName || ath?.shortName || 'Unknown', team: side, scored: !!d.scoringPlay };
+          })
+          .filter(Boolean);
+        shootout = takers.length ? { home: sh, away: sa, takers } : { home: sh, away: sa };
+      }
+    }
+
     // Skip the write if nothing actually changed (saves Firestore quota).
+    const koUnchanged = !(isKnockout(match) && isFinal)
+      || ((match.advance ?? null) === (advance ?? null)
+        && JSON.stringify(match.shootout ?? null) === JSON.stringify(shootout ?? null));
     const same =
       match.status === (isFinal ? 'FINISHED' : 'LIVE') &&
       match.result_home === result_home &&
       match.result_away === result_away &&
       JSON.stringify(match.events || []) === JSON.stringify(events) &&
-      (isFinal ? match.minute === undefined : match.minute === minute);
+      (isFinal ? match.minute === undefined : match.minute === minute) &&
+      koUnchanged;
     if (same) continue;
 
     const payload = {
@@ -146,10 +222,14 @@ async function main() {
       events,
       minute: isFinal ? deleteField() : minute,
     };
+    if (isKnockout(match) && isFinal) {
+      payload.advance = advance ?? deleteField();
+      payload.shootout = shootout ?? deleteField();
+    }
     await updateDoc(doc(db, 'matches', String(match.id)), payload);
     updated++;
     if (isFinal) finalized++; else live++;
-    console.log(`#${match.id} ${match.home} ${result_home}-${result_away} ${match.away} [${isFinal ? 'FINAL' : minute}] (${events.length} ev)`);
+    console.log(`#${match.id} ${match.home} ${result_home}-${result_away} ${match.away} [${isFinal ? 'FINAL' : minute}]${shootout ? ` (pens ${shootout.home}-${shootout.away})` : ''}${advance ? ` adv:${advance}` : ''} (${events.length} ev)`);
   }
 
   if (unmatched.length) {

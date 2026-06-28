@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
-import { Match, Player, Pick, FormMatch, kickoffMs, BET_WINDOW_MS } from '@/lib/data';
+import { Match, Player, Pick, FormMatch, kickoffMs, BET_WINDOW_MS, isKnockout, teamsResolved } from '@/lib/data';
 import { MatchCard } from '@/components/MatchCard';
 import { Emoji } from '@/components/Emoji';
 import { Leaderboard } from '@/components/Leaderboard';
@@ -97,18 +97,26 @@ export default function WorldCupApp() {
     }
   }, [currentUser, players]);
 
+  // A match is bettable now if it kicks off within the 48h window — and, for a
+  // knockout slot, only once the feeding round has resolved it to two real
+  // teams (you can't bet "Winner Group A"). Unresolved knockout slots fall
+  // through to Upcoming until the poller fills them in.
+
   // Up Next = bettable window: not finalized and kicking off within 48h (plus
   // any already-kicked-off matches still awaiting a result), soonest first.
   const upNextMatches = useMemo(() =>
     matches
-      .filter(m => m.status !== 'FINISHED' && kickoffMs(m) <= nowMs + BET_WINDOW_MS)
+      .filter(m => m.status !== 'FINISHED'
+        && kickoffMs(m) <= nowMs + BET_WINDOW_MS && (!isKnockout(m) || teamsResolved(m)))
       .sort((a, b) => kickoffMs(a) - kickoffMs(b)),
     [matches, nowMs]);
 
-  // Upcoming = future fixtures more than 48h out — visible but not yet bettable.
+  // Upcoming = future fixtures not yet bettable (>48h out, or an unresolved
+  // knockout slot) — visible but not yet open.
   const upcomingMatches = useMemo(() =>
     matches
-      .filter(m => m.status !== 'FINISHED' && kickoffMs(m) > nowMs + BET_WINDOW_MS)
+      .filter(m => m.status !== 'FINISHED'
+        && !(kickoffMs(m) <= nowMs + BET_WINDOW_MS && (!isKnockout(m) || teamsResolved(m))))
       .sort((a, b) => kickoffMs(a) - kickoffMs(b)),
     [matches, nowMs]);
 
@@ -146,12 +154,22 @@ export default function WorldCupApp() {
     await updateDoc(doc(db, 'bets', key), { locked: true });
   };
 
-  const handleSetResult = async (matchId: number, score: { home: number, away: number }) => {
-    setMatches(prev => prev.map(m => m.id === matchId ? { ...m, status: 'FINISHED', result_home: score.home, result_away: score.away } : m));
+  const handleSetResult = async (
+    matchId: number,
+    result: { home: number; away: number; advance?: 'HOME' | 'AWAY'; shootout?: { home: number; away: number } },
+  ) => {
+    const { home, away, advance, shootout } = result;
+    setMatches(prev => prev.map(m => m.id === matchId
+      ? { ...m, status: 'FINISHED', result_home: home, result_away: away, advance, shootout }
+      : m));
     await updateDoc(doc(db, 'matches', String(matchId)), {
       status: 'FINISHED',
-      result_home: score.home,
-      result_away: score.away,
+      result_home: home,
+      result_away: away,
+      // Knockout only — clear them on a group match (or if a knockout is edited
+      // from a shootout to a clear winner) so stale data can't linger.
+      advance: advance ?? deleteField(),
+      shootout: shootout ?? deleteField(),
     });
   };
 
@@ -159,12 +177,14 @@ export default function WorldCupApp() {
   // it leaves Past and re-enters the Up Next / Upcoming flow. Bets are kept.
   const handleReopenResult = async (matchId: number) => {
     setMatches(prev => prev.map(m => m.id === matchId
-      ? { ...m, status: 'UPCOMING', result_home: undefined, result_away: undefined }
+      ? { ...m, status: 'UPCOMING', result_home: undefined, result_away: undefined, advance: undefined, shootout: undefined }
       : m));
     await updateDoc(doc(db, 'matches', String(matchId)), {
       status: 'UPCOMING',
       result_home: deleteField(),
       result_away: deleteField(),
+      advance: deleteField(),
+      shootout: deleteField(),
     });
   };
 

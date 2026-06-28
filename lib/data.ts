@@ -8,6 +8,19 @@ export interface MatchEvent {
   kind: 'goal' | 'own-goal' | 'penalty' | 'red';
 }
 
+// A penalty kick in a knockout shootout. Display + tiebreak only — `advance`
+// (not the shootout score) is what scoring reads.
+export interface ShootoutKick {
+  player: string;
+  team: 'HOME' | 'AWAY';
+  scored: boolean;
+}
+
+// Tournament stage. Absent or 'GROUP' = a group-stage fixture (every seeded
+// match 1–72). The rest are the knockout rounds (matches 73–104). Knockout
+// matches can't draw on aggregate, so they're bet/scored on who advances.
+export type Stage = 'GROUP' | 'R32' | 'R16' | 'QF' | 'SF' | 'THIRD' | 'FINAL';
+
 export interface Match {
   id: number;
   home: string;
@@ -22,6 +35,15 @@ export interface Match {
   minute?: string;
   // Goals + red cards in chronological order (LIVE and FINISHED).
   events?: MatchEvent[];
+  // Knockout only. Undefined/'GROUP' for the 72 group-stage fixtures.
+  stage?: Stage;
+  // Knockout only: the side that progressed. This (not the scoreline) is the
+  // scored outcome, so a tie settled in extra time / on penalties scores the
+  // correct picker. Set on a finished knockout match.
+  advance?: 'HOME' | 'AWAY';
+  // Knockout only: penalty shootout tally (+ optional per-kick list). Present
+  // only when a level match went to spot-kicks.
+  shootout?: { home: number; away: number; takers?: ShootoutKick[] };
 }
 
 // Players self-register; the roster lives in the Firestore `players` collection,
@@ -70,7 +92,7 @@ export interface Bet {
   locked: boolean;
 }
 
-// The actual match result expressed as an outcome (null until finalized).
+// The 90/120-minute scoreline expressed as an outcome (null until finalized).
 export function resultOutcome(resultHome?: number, resultAway?: number): Pick | null {
   if (resultHome === undefined || resultAway === undefined) return null;
   if (resultHome > resultAway) return 'HOME';
@@ -78,9 +100,28 @@ export function resultOutcome(resultHome?: number, resultAway?: number): Pick | 
   return 'DRAW';
 }
 
+// A knockout fixture (matches 73–104). Group matches have no/`'GROUP'` stage.
+export function isKnockout(m: Match): boolean {
+  return !!m.stage && m.stage !== 'GROUP';
+}
+
+// True once a knockout slot holds two real teams (not placeholder labels like
+// "Winner Group A"). Real team names are exactly the TEAM_ISO keys.
+export function teamsResolved(m: Match): boolean {
+  return m.home in TEAM_ISO && m.away in TEAM_ISO;
+}
+
+// The scored outcome of a match: who *won*. For knockouts this is `advance`
+// (so penalty/ET results score correctly); otherwise the scoreline decides.
+// Null until finalized.
+export function outcomeOf(m: Match): Pick | null {
+  if (m.advance) return m.advance;
+  return resultOutcome(m.result_home, m.result_away);
+}
+
 // Correct pick = win (1 pt), otherwise loss. No exact-score tier.
-export function betOutcome(pick: Pick | undefined, resultHome?: number, resultAway?: number): BetOutcome {
-  const actual = resultOutcome(resultHome, resultAway);
+export function betOutcome(pick: Pick | undefined, m: Match): BetOutcome {
+  const actual = outcomeOf(m);
   if (!pick || !actual) return 'none';
   return pick === actual ? 'win' : 'loss';
 }
@@ -128,7 +169,7 @@ export function computePunterStats(
     const timeline: number[] = [0];
     for (const m of finished) {
       const bet = bets[`${u.id}_${m.id}`];
-      const out = bet?.pick ? betOutcome(bet.pick, m.result_home, m.result_away) : 'none';
+      const out = bet?.pick ? betOutcome(bet.pick, m) : 'none';
       if (out === 'win') {
         points += 1;
         if (runType === 'hot') runLen++; else { runType = 'hot'; runLen = 1; }
@@ -193,7 +234,7 @@ export function computeCrowdStats(
   for (const u of users) record[u.id] = { id: u.id, name: u.name, avatar: u.avatar, risky: 0, hits: 0 };
 
   for (const m of finished) {
-    const result = resultOutcome(m.result_home, m.result_away);
+    const result = outcomeOf(m);
     if (!result) continue;
     // Committed picks for this match, tallied per option.
     const counts: Record<Pick, number> = { HOME: 0, DRAW: 0, AWAY: 0 };

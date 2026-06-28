@@ -26,7 +26,7 @@ if (!firebaseConfig.projectId) {
   process.exit(1);
 }
 
-const COLLECTIONS = ['matches', 'bets', 'players', 'arbiters', 'config'];
+const COLLECTIONS = ['matches', 'bets', 'players', 'teams', 'arbiters', 'config'];
 
 const db = getFirestore(initializeApp(firebaseConfig));
 
