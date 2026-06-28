@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
-import { computePunterStats, computeCrowdStats, type PunterStat } from '@/lib/data';
+import { computePunterStats, computeCrowdStats, computeKnockoutStats, type PunterStat } from '@/lib/data';
 import { Emoji, isDistortedFace, DISTORTED_FACE_SRC } from '@/components/Emoji';
 
 // Distinct line colours for the race. Warm/editorial palette that sits inside
@@ -257,6 +257,9 @@ export const AnalyticsLab = ({ users, bets, matches, onBack }: any) => {
   // Group-betting tendencies (crowd wisdom, underdogs, risk-takers).
   const crowd = useMemo(() => computeCrowdStats(users, bets, matches), [users, bets, matches]);
 
+  // Knockout-only records (Knockout Hero / Bottler).
+  const ko = useMemo(() => computeKnockoutStats(users, bets, matches), [users, bets, matches]);
+
   return (
     <div className="w-full max-w-md mx-auto mt-8">
       {/* Header + back control */}
@@ -393,6 +396,35 @@ export const AnalyticsLab = ({ users, bets, matches, onBack }: any) => {
                 : 'no risky bets yet'}
             />
           </div>
+
+          {/* Knockout records — only once the bracket has produced results */}
+          {ko.koFinished > 0 && (
+            <>
+              <div className="mb-3 font-mono text-[10px] uppercase tracking-widest text-paper/40 border-b border-chalk pb-2">
+                Knockout
+              </div>
+              <div className="grid grid-cols-2 gap-3 mb-10">
+                <StatCard
+                  label="Knockout Hero"
+                  emoji="🦸"
+                  tint="hot"
+                  primary={ko.hero ? <><Emoji emoji={ko.hero.avatar} /> {ko.hero.name}</> : '—'}
+                  secondary={ko.hero
+                    ? `${ko.hero.koHits}/${ko.hero.koPlayed} knockouts right`
+                    : 'no knockout picks right yet'}
+                />
+                <StatCard
+                  label="Bottler"
+                  emoji="🍾"
+                  tint="cold"
+                  primary={ko.bottler ? <><Emoji emoji={ko.bottler.avatar} /> {ko.bottler.name}</> : '—'}
+                  secondary={ko.bottler
+                    ? `backed the loser ${ko.bottler.bottles}× — out of the cup`
+                    : 'nobody backed a loser yet'}
+                />
+              </div>
+            </>
+          )}
 
           {/* Per-punter streak legend */}
           <div className="mb-3 font-mono text-[10px] uppercase tracking-widest text-paper/40 border-b border-chalk pb-2">

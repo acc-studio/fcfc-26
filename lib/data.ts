@@ -302,6 +302,73 @@ export function computeCrowdStats(
   };
 }
 
+// --- Knockout analytics ---------------------------------------------------
+// Two bracket-specific punter stats, derived from finished knockout matches and
+// each punter's committed picks. A knockout has a definite winner (`outcomeOf`
+// reads `advance`, so ET/penalties are respected), and the other side is OUT.
+//   - koHits  : picked the side that went through  -> "Knockout Hero" (most)
+//   - bottles : picked the side that got knocked out -> "Bottler" (most; you
+//               were "eliminated from the World Cup" that many times)
+export interface KnockoutRecord {
+  id: string;
+  name: string;
+  avatar: string;
+  koPlayed: number;   // knockout matches this punter committed a pick on
+  koHits: number;     // correct (picked the advancing side)
+  bottles: number;    // wrong on the elimination (picked the team that went out)
+}
+export interface KnockoutStats {
+  koFinished: number;            // finished knockout matches counted
+  records: KnockoutRecord[];
+  hero: KnockoutRecord | null;   // most knockout picks right
+  bottler: KnockoutRecord | null; // most times backing the eliminated side
+}
+
+export function computeKnockoutStats(
+  users: Player[],
+  bets: Record<string, Bet | undefined>,
+  matches: Match[],
+): KnockoutStats {
+  const ko = finishedInOrder(matches).filter(isKnockout);
+  const record: Record<string, KnockoutRecord> = {};
+  for (const u of users) record[u.id] = { id: u.id, name: u.name, avatar: u.avatar, koPlayed: 0, koHits: 0, bottles: 0 };
+
+  for (const m of ko) {
+    const winner = outcomeOf(m);
+    if (winner !== 'HOME' && winner !== 'AWAY') continue; // a knockout can't be a draw
+    const eliminated: Pick = winner === 'HOME' ? 'AWAY' : 'HOME';
+    for (const u of users) {
+      const pick = bets[`${u.id}_${m.id}`]?.pick;
+      if (!pick) continue;
+      record[u.id].koPlayed++;
+      if (pick === winner) record[u.id].koHits++;
+      else if (pick === eliminated) record[u.id].bottles++;
+    }
+  }
+
+  const records = Object.values(record);
+  const hero = records.some(r => r.koHits > 0)
+    ? [...records].sort((a, b) => b.koHits - a.koHits || a.bottles - b.bottles || a.name.localeCompare(b.name))[0]
+    : null;
+  const bottler = records.some(r => r.bottles > 0)
+    ? [...records].sort((a, b) => b.bottles - a.bottles || a.koHits - b.koHits || a.name.localeCompare(b.name))[0]
+    : null;
+
+  return { koFinished: ko.length, records, hero, bottler };
+}
+
+// Display order of the knockout tree, fixed by the seed's feeder map so each
+// round's nodes sit between the two matches that feed them (top→bottom). Used by
+// the Bracket tab. The third-place match is a side fixture, kept out of the tree.
+export const BRACKET_ROUNDS: { stage: Stage; ids: number[] }[] = [
+  { stage: 'R32', ids: [74, 77, 73, 75, 83, 84, 81, 82, 76, 78, 79, 80, 86, 88, 85, 87] },
+  { stage: 'R16', ids: [89, 90, 93, 94, 91, 92, 95, 96] },
+  { stage: 'QF', ids: [97, 98, 99, 100] },
+  { stage: 'SF', ids: [101, 102] },
+  { stage: 'FINAL', ids: [104] },
+];
+export const THIRD_PLACE_ID = 103;
+
 // --- Recent form ----------------------------------------------------------
 // A nation's recent results across all competitions, fetched from ESPN by
 // scripts/form.mjs and stored in `teams/{name}` docs. Display-only.

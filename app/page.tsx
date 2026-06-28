@@ -7,6 +7,7 @@ import { MatchCard } from '@/components/MatchCard';
 import { Emoji } from '@/components/Emoji';
 import { Leaderboard } from '@/components/Leaderboard';
 import { Groups } from '@/components/Groups';
+import { Bracket } from '@/components/Bracket';
 import { auth, db } from '@/lib/firebase';
 import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { AuthModal } from '@/components/AuthModal';
@@ -14,7 +15,7 @@ import { RegisterModal } from '@/components/RegisterModal';
 import { ArbiterModal } from '@/components/ArbiterModal';
 
 export default function WorldCupApp() {
-  const [activeTab, setActiveTab] = useState<'next' | 'upcoming' | 'past' | 'groups' | 'table'>('next');
+  const [activeTab, setActiveTab] = useState<'next' | 'upcoming' | 'past' | 'groups' | 'bracket' | 'table'>('next');
 
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [authModal, setAuthModal] = useState<{ isOpen: boolean; target: Player | null }>({
@@ -33,6 +34,10 @@ export default function WorldCupApp() {
   const [isLoading, setIsLoading] = useState(true);
   // Refreshed every minute so the 48h betting window closes live.
   const [nowMs, setNowMs] = useState(() => Date.now());
+  // Per-viewer "ignore" list (local only): players the current user has muted.
+  // They drop out of this device's table, analytics and bet displays. Keyed by
+  // the logged-in player so each profile on a shared device has its own list.
+  const [ignored, setIgnored] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const lastUser = localStorage.getItem('pitch_club_user');
@@ -96,6 +101,27 @@ export default function WorldCupApp() {
       localStorage.removeItem('pitch_club_user');
     }
   }, [currentUser, players]);
+
+  // Load this profile's ignore list when the logged-in user changes (logged out
+  // = ignore nobody). Handlers below write through to localStorage directly.
+  useEffect(() => {
+    if (!currentUser) { setIgnored(new Set()); return; }
+    try {
+      const raw = localStorage.getItem(`pitch_ignored_${currentUser}`);
+      setIgnored(new Set(raw ? JSON.parse(raw) : []));
+    } catch { setIgnored(new Set()); }
+  }, [currentUser]);
+
+  const persistIgnored = (next: Set<string>) => {
+    setIgnored(next);
+    if (currentUser) localStorage.setItem(`pitch_ignored_${currentUser}`, JSON.stringify([...next]));
+  };
+  const handleIgnore = (id: string) => { const n = new Set(ignored); n.add(id); persistIgnored(n); };
+  const handleUnignore = (id: string) => { const n = new Set(ignored); n.delete(id); persistIgnored(n); };
+
+  // Roster minus anyone this viewer has muted — fed to the cards, bracket and
+  // analytics so ignored players vanish from bet displays and stats.
+  const visiblePlayers = useMemo(() => players.filter(p => !ignored.has(p.id)), [players, ignored]);
 
   // A match is bettable now if it kicks off within the 48h window — and, for a
   // knockout slot, only once the feeding round has resolved it to two real
@@ -342,7 +368,7 @@ export default function WorldCupApp() {
                       key={match.id}
                       match={match}
                       userBets={bets}
-                      players={players}
+                      players={visiblePlayers}
                       onPick={handlePick}
                       onLockIn={handleLockIn}
                       onSetResult={handleSetResult}
@@ -377,7 +403,7 @@ export default function WorldCupApp() {
                       key={match.id}
                       match={match}
                       userBets={bets}
-                      players={players}
+                      players={visiblePlayers}
                       onPick={handlePick}
                       onLockIn={handleLockIn}
                       onSetResult={handleSetResult}
@@ -412,7 +438,7 @@ export default function WorldCupApp() {
                       key={match.id}
                       match={match}
                       userBets={bets}
-                      players={players}
+                      players={visiblePlayers}
                       onPick={handlePick}
                       onLockIn={handleLockIn}
                       onSetResult={handleSetResult}
@@ -440,6 +466,18 @@ export default function WorldCupApp() {
               </motion.div>
             )}
 
+            {activeTab === 'bracket' && (
+              <motion.div
+                key="bracket"
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                transition={{ duration: 0.3 }}
+              >
+                <Bracket matches={matches} players={visiblePlayers} bets={bets} currentUser={currentUser || ''} />
+              </motion.div>
+            )}
+
             {activeTab === 'table' && (
               <motion.div
                 key="table"
@@ -448,7 +486,15 @@ export default function WorldCupApp() {
                 exit={{ opacity: 0, x: 10 }}
                 transition={{ duration: 0.3 }}
               >
-                <Leaderboard users={players} bets={bets} matches={matches} />
+                <Leaderboard
+                  users={players}
+                  bets={bets}
+                  matches={matches}
+                  ignored={ignored}
+                  currentUser={currentUser}
+                  onIgnore={handleIgnore}
+                  onUnignore={handleUnignore}
+                />
               </motion.div>
             )}
           </AnimatePresence>
@@ -518,6 +564,22 @@ export default function WorldCupApp() {
           >
             Groups
             {activeTab === 'groups' && (
+              <motion.div layoutId="nav-indicator" className="absolute bottom-2 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-gold" />
+            )}
+          </button>
+
+          <div className="w-px bg-chalk my-4 opacity-50"></div>
+
+          {/* Bracket Tab */}
+          <button
+            onClick={() => setActiveTab('bracket')}
+            className={clsx(
+              "flex-1 py-6 text-center font-mono text-[10px] md:text-[11px] uppercase tracking-wide transition-colors relative whitespace-nowrap",
+              activeTab === 'bracket' ? "text-gold" : "text-paper/40 hover:text-paper"
+            )}
+          >
+            Bracket
+            {activeTab === 'bracket' && (
               <motion.div layoutId="nav-indicator" className="absolute bottom-2 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-gold" />
             )}
           </button>
