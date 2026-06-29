@@ -35,11 +35,13 @@ const PredNode = ({ sides, pick, slotH, mode, onPick, decided, actual }: {
     } else {
       tone = clsx('border-transparent', team ? 'text-paper/55' : 'text-paper/25');
     }
+    const undoable = isPick && mode === 'build';
     return (
       <button
         type="button"
         disabled={!selectable}
         onClick={() => team && onPick?.(team)}
+        title={undoable ? 'Tap again to rescind' : undefined}
         className={clsx(
           'flex items-center gap-1.5 min-w-0 w-full rounded-sm border px-1.5 py-1 text-left transition-colors touch-manipulation',
           tone,
@@ -50,6 +52,7 @@ const PredNode = ({ sides, pick, slotH, mode, onPick, decided, actual }: {
           ? <Flag team={team} className="w-4 h-3 shrink-0" />
           : <span className="w-4 h-3 shrink-0 rounded-[2px] border border-dashed border-white/15" />}
         <span className="truncate text-[11px] font-sans">{team ?? 'TBD'}</span>
+        {undoable && <span aria-hidden className="ml-auto pl-1 shrink-0 text-[10px] leading-none text-gold/60">✕</span>}
       </button>
     );
   };
@@ -166,10 +169,17 @@ export const BracketGame = ({ matches, players, currentUser, brackets, onLock }:
   // key); the bets collection/state is unreachable from here — BracketGame is
   // never handed `bets` or any bet handler, and its only write path is `onLock`
   // (-> brackets/{user}). Do not wire bet writes into this component.
+  //
+  // Tapping a team picks it; re-tapping the team that's already picked rescinds
+  // it. Either way prunePicks then drops any higher-round pick the change
+  // invalidated (e.g. rescinding a R32 winner clears the R16 slot it filled).
   const handlePick = (matchId: number, team: string) => {
     setConfirmLock(false);
     setDraft((prev) => {
-      const next = prunePicks({ ...prev, [matchId]: team }, byId);
+      const base = { ...prev };
+      if (base[matchId] === team) delete base[matchId];   // rescind
+      else base[matchId] = team;
+      const next = prunePicks(base, byId);
       if (draftKey) localStorage.setItem(draftKey, JSON.stringify(next));
       return next;
     });
@@ -202,7 +212,7 @@ export const BracketGame = ({ matches, players, currentUser, brackets, onLock }:
           <span className="font-mono text-[11px] tabular-nums text-paper/50">{made}/{TOTAL_PICKS}</span>
         </div>
         <p className="font-mono text-[10px] leading-relaxed text-paper/40 mb-3">
-          tap who advances in each tie — your pick carries into the next round, all the way to the trophy.
+          tap who advances in each tie — your pick carries into the next round, all the way to the trophy. tap a pick again to rescind it. nothing is final until you lock in.
         </p>
         {/* progress bar */}
         <div className="h-1 w-full rounded bg-pitch-800 overflow-hidden mb-4">
