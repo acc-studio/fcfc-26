@@ -17,6 +17,7 @@
   --c-chalk: rgba(232, 230, 217, 0.15);
   --c-card: 26 38 33;          /* #1A2621 */
   --c-card-arbiter: 42 26 26;  /* #2A1A1A */
+  --c-active: 232 230 217;     /* selected-item highlight (bone, = paper) */
 
   --grain-opacity: 0.5;
 
@@ -37,8 +38,18 @@
   --c-chalk: rgba(30, 42, 34, 0.18);
   --c-card: 240 238 228;       /* #F0EEE4 */
   --c-card-arbiter: 240 224 224; /* #F0E0E0 light red tint */
+  --c-active: 138 109 24;      /* selected-item highlight (deep gold, not a heavy dark block) */
 
   --grain-opacity: 0.25;
+}
+
+/* During a theme switch, suppress every transition for one frame so the whole
+   UI repaints at once instead of each element easing its colours independently
+   (which looked like the page changing piecemeal). */
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition: none !important;
 }
 
 body {

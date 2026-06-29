@@ -24,6 +24,7 @@ const config: Config = {
         chalk: 'var(--c-chalk)',                        // Borders (alpha baked in)
         card: 'rgb(var(--c-card) / <alpha-value>)',           // tactile card surface
         'card-arbiter': 'rgb(var(--c-card-arbiter) / <alpha-value>)', // arbiter-mode card
+        active: 'rgb(var(--c-active) / <alpha-value>)',       // selected-item highlight (theme-aware)
       },
       fontFamily: {
         serif: ['var(--font-fraunces)', 'serif'],

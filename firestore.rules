@@ -79,6 +79,25 @@ service cloud.firestore {
       allow delete: if isArbiter();
     }
 
+    // Web-push subscriptions. Each device, while signed in, registers/removes
+    // its own subscription tagged with the player id it's logged in as. Only the
+    // sender (the poller, an arbiter) reads them — endpoints are mildly sensitive
+    // and nothing in the app needs them client-side. Anyone signed in may delete
+    // (user opt-out), and the sender prunes expired ones.
+    match /pushSubs/{id} {
+      allow read: if isArbiter();
+      allow create, update: if request.auth != null
+        && request.resource.data.user_id is string
+        && request.resource.data.subscription is map;
+      allow delete: if request.auth != null;
+    }
+
+    // Notification dedup state — what's already been alerted on (match statuses,
+    // event counts, ranks, title holders). Written and read only by the sender.
+    match /notifyState/{id} {
+      allow read, write: if isArbiter();
+    }
+
     // Build-Your-Bracket predictions: world-readable (everyone can view each
     // other's locked bracket). A bracket is written once, locked, and is then
     // permanent — `update` is allowed only while the stored doc is still

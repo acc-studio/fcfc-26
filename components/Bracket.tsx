@@ -16,7 +16,7 @@ export const H = 64;            // R32 slot height (px)
 export const TOTAL = H * 16;    // full bracket height
 export const NODE_W = 156;
 export const CONN_W = 30;
-const STROKE = 'rgba(255,255,255,0.14)';
+const STROKE = 'rgb(var(--c-paper) / 0.2)';   // theme-aware: visible on light + dark
 
 export const STAGE_LABEL: Record<string, string> = {
   R32: 'Round of 32', R16: 'Round of 16', QF: 'Quarter-finals', SF: 'Semi-finals', FINAL: 'Final',
@@ -52,7 +52,7 @@ const CX = VIEW / 2;
 // radius by match depth: 0 = Final (centre) … 4 = R32 winner; index 5 = the
 // outer ring where the 32 competing teams sit.
 const RING = [0, 128, 212, 292, 368, 444];
-const RADIAL_STROKE = 'rgba(255,255,255,0.16)';
+const RADIAL_STROKE = 'rgb(var(--c-paper) / 0.22)';   // theme-aware: visible on light + dark
 
 // Flag diameter in px by match depth — slightly bigger toward the trophy,
 // smallest on the crowded outer ring. The champion is only a touch larger than

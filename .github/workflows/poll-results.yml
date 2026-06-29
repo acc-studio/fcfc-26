@@ -12,6 +12,10 @@ name: Poll live results
 #   NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID, NEXT_PUBLIC_FIREBASE_APP_ID
 # Plus ARBITER_CODE (the value in the config/arbiter doc) — the poller writes
 # results as a transient arbiter, which the tightened rules require.
+# For push notifications (scripts/notify.ts) also add a VAPID keypair:
+#   NEXT_PUBLIC_VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT (mailto:…)
+#   Generate once with: npx web-push generate-vapid-keys --json
+#   (the public key must also be set in Vercel so the client can subscribe).
 #
 # Reliable cadence: GitHub's `schedule` is best-effort and drops runs under load,
 # so the cron above is only a fallback. For a guaranteed interval, trigger this
@@ -56,6 +60,9 @@ jobs:
       NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
       NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
       ARBITER_CODE: ${{ secrets.ARBITER_CODE }}
+      NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${{ secrets.NEXT_PUBLIC_VAPID_PUBLIC_KEY }}
+      VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+      VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -65,6 +72,11 @@ jobs:
       - run: npm ci
       - name: Poll live scores
         run: node scripts/poll.mjs "${{ inputs.dates }}"
+      # Diff the fresh results against last run's snapshot and web-push the
+      # changes (results, goals, knockout unlocks, bet reminders, table moves,
+      # Analytics-Lab title changes). No-ops if the VAPID secrets are unset.
+      - name: Send push notifications
+        run: npx tsx scripts/notify.ts
       # Form changes rarely, so refresh it ~once an hour: this workflow fires
       # every ~10 min (external trigger), and only the run landing in the first
       # 10 minutes of the hour does the form pass.

@@ -458,6 +458,19 @@ export const TEAM_CONFEDERATION: Record<string, Confederation> = {
 
 export const CONFEDERATIONS: Confederation[] = ['UEFA', 'CONMEBOL', 'CONCACAF', 'CAF', 'AFC', 'OFC'];
 
+// Each confederation's affinity title + emoji — the punter who backs its teams
+// the most wears the (deliberately tongue-in-cheek) crown. Shared by the
+// Analytics Lab UI and the push-notification sender (scripts/notify.ts), so it
+// lives here in the framework-free data module rather than in a client component.
+export const AFFINITY_META: { confed: Confederation; title: string; emoji: string }[] = [
+  { confed: 'UEFA', title: 'Colonialist', emoji: '🎩' },
+  { confed: 'CONMEBOL', title: 'Sambist', emoji: '💃' },
+  { confed: 'CAF', title: 'Blacked', emoji: '🌍' },
+  { confed: 'CONCACAF', title: 'Cowboy', emoji: '🤠' },
+  { confed: 'AFC', title: 'Tempura', emoji: '🍤' },
+  { confed: 'OFC', title: 'Surfer', emoji: '🏄' },
+];
+
 // The team a committed pick backs to win — HOME/AWAY name a side; a DRAW backs
 // nobody. (An unresolved knockout placeholder isn't a real team, so it later
 // maps to no confederation and is skipped.)

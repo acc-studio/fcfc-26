@@ -15,6 +15,7 @@ import { AuthModal } from '@/components/AuthModal';
 import { RegisterModal } from '@/components/RegisterModal';
 import { ArbiterModal } from '@/components/ArbiterModal';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { NotifyToggle } from '@/components/NotifyToggle';
 
 export default function WorldCupApp() {
   const [activeTab, setActiveTab] = useState<'next' | 'upcoming' | 'past' | 'groups' | 'bracket' | 'table'>('next');
@@ -306,7 +307,10 @@ export default function WorldCupApp() {
             <h1 className="text-5xl md:text-7xl font-serif font-black tracking-tight leading-[0.9] text-paper">
               FCFC '26
             </h1>
-            <ThemeToggle />
+            <div className="flex items-center gap-2">
+              {currentUser && <NotifyToggle currentUser={currentUser} />}
+              <ThemeToggle />
+            </div>
           </div>
           <div className="mt-4 flex items-center gap-4">
             <span className="font-mono text-xs tracking-widest uppercase border-b pb-1 text-gold border-gold">
@@ -339,7 +343,7 @@ export default function WorldCupApp() {
                   key={p.id}
                   className={clsx(
                     "flex items-center rounded-full border text-xs font-mono transition-all whitespace-nowrap shrink-0",
-                    active ? "bg-paper text-pitch-900 border-paper font-bold" : "border-chalk text-paper/60 hover:border-gold/50"
+                    active ? "bg-active text-pitch-900 border-active font-bold" : "border-chalk text-paper/60 hover:border-gold/50"
                   )}
                 >
                   <button

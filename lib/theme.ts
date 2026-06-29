@@ -19,7 +19,13 @@ export function getTheme(): Theme {
 
 export function setTheme(theme: Theme) {
   if (typeof document === 'undefined') return;
-  document.documentElement.dataset.theme = theme;
+  const root = document.documentElement;
+  // Disable transitions for the swap so the whole page recolors in one frame
+  // (otherwise each element eases its colours independently and it looks janky).
+  root.classList.add('theme-switching');
+  root.dataset.theme = theme;
+  void root.offsetWidth; // force a synchronous reflow before re-enabling
+  requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('theme-switching')));
   try { localStorage.setItem(THEME_KEY, theme); } catch { /* private mode */ }
   let meta = document.querySelector('meta[name="theme-color"]');
   if (!meta) {

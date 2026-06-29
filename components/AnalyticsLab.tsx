@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
-import { computePunterStats, computeCrowdStats, computeKnockoutStats, computeValueStats, computeAffinityStats, type PunterStat, type Confederation } from '@/lib/data';
+import { computePunterStats, computeCrowdStats, computeKnockoutStats, computeValueStats, computeAffinityStats, AFFINITY_META, type PunterStat } from '@/lib/data';
 import { Emoji, isDistortedFace, DISTORTED_FACE_SRC } from '@/components/Emoji';
 
 // Distinct line colours for the race. Warm/editorial palette that sits inside
@@ -215,17 +215,6 @@ const RaceChart = ({ visible, allStats, steps }: { visible: PunterStat[]; allSta
     </div>
   );
 };
-
-// Each confederation's affinity title + emoji — the punter who backs its teams
-// the most wears the (deliberately tongue-in-cheek) crown.
-const AFFINITY_META: { confed: Confederation; title: string; emoji: string }[] = [
-  { confed: 'UEFA', title: 'Colonialist', emoji: '🎩' },
-  { confed: 'CONMEBOL', title: 'Sambist', emoji: '💃' },
-  { confed: 'CAF', title: 'Blacked', emoji: '🌍' },
-  { confed: 'CONCACAF', title: 'Cowboy', emoji: '🤠' },
-  { confed: 'AFC', title: 'Tempura', emoji: '🍤' },
-  { confed: 'OFC', title: 'Surfer', emoji: '🏄' },
-];
 
 export const AnalyticsLab = ({ users, bets, matches, onBack }: any) => {
   const { finished, stats } = useMemo(
