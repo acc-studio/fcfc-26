@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
-import { computePunterStats, computeCrowdStats, computeKnockoutStats, type PunterStat } from '@/lib/data';
+import { computePunterStats, computeCrowdStats, computeKnockoutStats, computeValueStats, type PunterStat } from '@/lib/data';
 import { Emoji, isDistortedFace, DISTORTED_FACE_SRC } from '@/components/Emoji';
 
 // Distinct line colours for the race. Warm/editorial palette that sits inside
@@ -260,6 +260,11 @@ export const AnalyticsLab = ({ users, bets, matches, onBack }: any) => {
   // Knockout-only records (Knockout Hero / Bottler).
   const ko = useMemo(() => computeKnockoutStats(users, bets, matches), [users, bets, matches]);
 
+  // Value Table: rarity-weighted scoring that rewards calling outcomes the crowd
+  // missed (risky-but-right banks more than safe-and-right).
+  const value = useMemo(() => computeValueStats(users, bets, matches), [users, bets, matches]);
+  const topValue = value.records[0]?.value ?? 0;
+
   return (
     <div className="w-full max-w-md mx-auto mt-8">
       {/* Header + back control */}
@@ -426,28 +431,46 @@ export const AnalyticsLab = ({ users, bets, matches, onBack }: any) => {
             </>
           )}
 
-          {/* Per-punter streak legend */}
-          <div className="mb-3 font-mono text-[10px] uppercase tracking-widest text-paper/40 border-b border-chalk pb-2">
-            Form Guide
+          {/* Value Table — rarity-weighted scoring. Each correct pick banks
+              1 − log₂(P), where P is the share of the group that also called it,
+              so backing an outcome the crowd missed is worth far more than
+              piling onto a consensus. */}
+          <div className="mb-1 font-mono text-[10px] uppercase tracking-widest text-paper/40 border-b border-chalk pb-2">
+            Value Table
           </div>
+          <p className="mb-3 font-mono text-[10px] leading-relaxed text-paper/35">
+            against-the-grain scoring · rarer correct calls bank more · {value.scored} match{value.scored === 1 ? '' : 'es'} valued
+          </p>
           <div className="flex flex-col gap-2">
-            {ranked.map(s => (
-              <div
-                key={s.id}
-                className="flex items-center justify-between p-3 rounded border border-transparent bg-pitch-800/30"
-              >
-                <div className="flex items-center gap-3">
-                  <span
-                    className="w-2.5 h-2.5 rounded-sm shrink-0"
-                    style={{ backgroundColor: colorOf(stats, s.id) }}
+            {value.records.map((r, i) => {
+              const pct = topValue > 0 ? (r.value / topValue) * 100 : 0;
+              const color = colorOf(stats, r.id);
+              return (
+                <div
+                  key={r.id}
+                  className="relative overflow-hidden flex items-center justify-between p-3 rounded border border-transparent bg-pitch-800/30"
+                >
+                  {/* value bar, scaled to the leader */}
+                  <div
+                    className="absolute inset-y-0 left-0 opacity-15"
+                    style={{ width: `${pct}%`, backgroundColor: color }}
                   />
-                  <span className="text-lg"><Emoji emoji={s.avatar} /></span>
-                  <span className="font-sans font-bold text-sm text-paper">{s.name}</span>
-                  <StreakBadge stat={s} />
+                  <div className="relative flex items-center gap-3 min-w-0">
+                    <span className="font-mono text-[11px] text-paper/30 w-4 tabular-nums">{i + 1}</span>
+                    <span className="text-lg"><Emoji emoji={r.avatar} /></span>
+                    <div className="flex flex-col min-w-0">
+                      <span className="font-sans font-bold text-sm text-paper truncate">{r.name}</span>
+                      <span className="font-mono text-[10px] text-paper/40 tabular-nums">
+                        {r.hits} hit{r.hits === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="relative font-mono text-base text-gold font-bold tabular-nums pl-2">
+                    {r.value.toFixed(2)}
+                  </span>
                 </div>
-                <span className="font-mono text-sm text-gold font-bold w-8 text-center">{s.points}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}

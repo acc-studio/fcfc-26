@@ -302,6 +302,75 @@ export function computeCrowdStats(
   };
 }
 
+// --- Value analytics ------------------------------------------------------
+// The "Value Table" rewards calling outcomes the crowd missed, so risky-but-
+// right beats safe-and-right. For each finished match every punter who picked
+// the actual result banks a rarity score based on how few of the group also
+// called it:
+//   P_outcome = (correct picks for the result) / (total committed picks)
+//   Score     = 1 - log2(P_outcome)
+// A unanimous correct call (P = 1.0) banks exactly 1.0 (the consensus cap —
+// log2(1) = 0); a lone-wolf correct call in a 6-way field (P = 1/6) banks
+// ~3.58. Wrong picks bank nothing. Punters are ranked by total banked value.
+export interface ValueRecord {
+  id: string;
+  name: string;
+  avatar: string;
+  value: number;   // total rarity-weighted value banked across finished matches
+  hits: number;    // correct picks that scored
+  best: number;    // biggest single-match haul (rarest correct call)
+}
+export interface ValueStats {
+  records: ValueRecord[];   // sorted by value desc
+  scored: number;           // finished matches that contributed (had >=1 pick)
+}
+
+export function computeValueStats(
+  users: Player[],
+  bets: Record<string, Bet | undefined>,
+  matches: Match[],
+): ValueStats {
+  const finished = finishedInOrder(matches);
+  const record: Record<string, ValueRecord> = {};
+  for (const u of users) record[u.id] = { id: u.id, name: u.name, avatar: u.avatar, value: 0, hits: 0, best: 0 };
+  let scored = 0;
+
+  for (const m of finished) {
+    const result = outcomeOf(m);
+    if (!result) continue;
+    // Committed picks for this match, tallied per option.
+    const counts: Record<Pick, number> = { HOME: 0, DRAW: 0, AWAY: 0 };
+    const pickers: { id: string; pick: Pick }[] = [];
+    for (const u of users) {
+      const pick = bets[`${u.id}_${m.id}`]?.pick;
+      if (!pick) continue;
+      counts[pick]++;
+      pickers.push({ id: u.id, pick });
+    }
+    const total = pickers.length;
+    if (total === 0) continue;   // no predictions — nothing to value
+    scored++;
+
+    // Selection ratio of the winning outcome. Zero-bound protection: clamp the
+    // count to a single phantom voter so log2 stays finite even if nobody backed
+    // the result (no punter actually banks it, but the maths is defined).
+    const correctCount = Math.max(1, counts[result]);
+    const p = correctCount / total;
+    const score = 1 - Math.log2(p);   // P = 1 -> 1.0 (consensus cap); rarer -> higher
+
+    for (const { id, pick } of pickers) {
+      if (pick !== result) continue;
+      record[id].value += score;
+      record[id].hits++;
+      if (score > record[id].best) record[id].best = score;
+    }
+  }
+
+  const records = Object.values(record)
+    .sort((a, b) => b.value - a.value || b.hits - a.hits || a.name.localeCompare(b.name));
+  return { records, scored };
+}
+
 // --- Knockout analytics ---------------------------------------------------
 // Two bracket-specific punter stats, derived from finished knockout matches and
 // each punter's committed picks. A knockout has a definite winner (`outcomeOf`
