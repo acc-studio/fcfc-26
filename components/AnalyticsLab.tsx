@@ -110,8 +110,8 @@ const RaceChart = ({ visible, allStats, steps }: { visible: PunterStat[]; allSta
         <rect x={0} y={0} width={W} height={H} fill="transparent" onClick={() => setHover(null)} />
         {ticks.map(p => (
           <g key={p}>
-            <line x1={padL} x2={endX} y1={y(p)} y2={y(p)} stroke="#ffffff" strokeOpacity={0.06} strokeWidth={1} />
-            <text x={padL - 2} y={y(p) + 3} fontSize={8} fill="#ffffff" fillOpacity={0.3} fontFamily="monospace" textAnchor="end">{p}</text>
+            <line x1={padL} x2={endX} y1={y(p)} y2={y(p)} stroke="rgb(var(--c-paper))" strokeOpacity={0.1} strokeWidth={1} />
+            <text x={padL - 2} y={y(p) + 3} fontSize={8} fill="rgb(var(--c-paper))" fillOpacity={0.4} fontFamily="monospace" textAnchor="end">{p}</text>
           </g>
         ))}
         {stats.map((s, idx) => {
@@ -156,7 +156,7 @@ const RaceChart = ({ visible, allStats, steps }: { visible: PunterStat[]; allSta
             const active = hover?.sx === cx && hover?.sy === cy;
             return (
               <g key={`${s.id}-${i}`}>
-                {active && <circle cx={cx} cy={cy} r={3.5} fill={color} stroke="#0f1a14" strokeWidth={1.5} />}
+                {active && <circle cx={cx} cy={cy} r={3.5} fill={color} stroke="rgb(var(--c-pitch-900))" strokeWidth={1.5} />}
                 <circle
                   cx={cx}
                   cy={cy}

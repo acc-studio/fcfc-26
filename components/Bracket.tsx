@@ -180,7 +180,7 @@ export const RadialBracket = ({ leaf, node, onSelect, selectedId }: RadialBracke
       } else if (isFinal) {
         chip = <span style={{ width: px, height: px, fontSize: px * 0.6 }} className={clsx('flex shrink-0 items-center justify-center rounded-full leading-none', tone === 'live' && 'animate-pulse', sel && 'ring-2 ring-gold')}>🏆</span>;
       } else {
-        chip = <span style={{ width: px, height: px }} className={clsx('block shrink-0 rounded-full border', tone === 'live' ? 'border-signal bg-signal/20 animate-pulse' : 'border-white/25 bg-pitch-800', sel && 'ring-2 ring-gold')} />;
+        chip = <span style={{ width: px, height: px }} className={clsx('block shrink-0 rounded-full border', tone === 'live' ? 'border-signal bg-signal/20 animate-pulse' : 'border-paper/25 bg-pitch-800', sel && 'ring-2 ring-gold')} />;
       }
       const style = { left: pct(np.x), top: pct(np.y) };
       const cls = 'absolute z-20 -translate-x-1/2 -translate-y-1/2';

@@ -57,10 +57,10 @@ export const LineupModal = ({ match, isOpen, onClose }: LineupModalProps) => {
             style={view === 'pitch' ? { width: 'min(94vw, 62vh)' } : undefined}
           >
             {/* Header */}
-            <div className="sticky top-0 bg-pitch-800 border-b border-white/10 px-5 py-4 flex items-center justify-between gap-3 z-10">
+            <div className="sticky top-0 bg-pitch-800 border-b border-paper/10 px-5 py-4 flex items-center justify-between gap-3 z-10">
               <div className="flex items-center gap-3 min-w-0">
                 <h3 className="font-serif text-xl text-paper shrink-0">Starting XI</h3>
-                <div className="flex rounded border border-white/15 overflow-hidden font-mono text-[9px] uppercase tracking-widest">
+                <div className="flex rounded border border-paper/15 overflow-hidden font-mono text-[9px] uppercase tracking-widest">
                   {(['pitch', 'list'] as const).map((v) => (
                     <button
                       key={v}

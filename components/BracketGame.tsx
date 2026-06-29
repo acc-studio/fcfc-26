@@ -50,7 +50,7 @@ const PredNode = ({ sides, pick, slotH, mode, onPick, decided, actual }: {
       >
         {team
           ? <Flag team={team} className="w-4 h-3 shrink-0" />
-          : <span className="w-4 h-3 shrink-0 rounded-[2px] border border-dashed border-white/15" />}
+          : <span className="w-4 h-3 shrink-0 rounded-[2px] border border-dashed border-paper/15" />}
         <span className="truncate text-[11px] font-sans">{team ?? 'TBD'}</span>
         {undoable && <span aria-hidden className="ml-auto pl-1 shrink-0 text-[10px] leading-none text-gold/60">✕</span>}
       </button>
@@ -58,7 +58,7 @@ const PredNode = ({ sides, pick, slotH, mode, onPick, decided, actual }: {
   };
   return (
     <div className="relative flex items-center" style={{ height: slotH }}>
-      <div style={{ width: NODE_W }} className="flex flex-col gap-0.5 rounded border border-white/10 bg-[#1A2621] p-1">
+      <div style={{ width: NODE_W }} className="flex flex-col gap-0.5 rounded border border-chalk bg-card p-1">
         {teamRow(sides.home)}
         {teamRow(sides.away)}
       </div>

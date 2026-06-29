@@ -16,7 +16,7 @@ export const Flag = ({ team, className }: { team: string; className?: string }) 
       src={`https://flagcdn.com/w640/${code}.png`}
       srcSet={`https://flagcdn.com/w1280/${code}.png 2x`}
       alt={team}
-      className={clsx("object-cover rounded-[2px] border border-white/10", className)}
+      className={clsx("object-cover rounded-[2px] border border-paper/10", className)}
     />
   );
 };

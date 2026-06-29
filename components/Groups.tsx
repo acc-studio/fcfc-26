@@ -18,7 +18,7 @@ export const Groups = ({ matches }: { matches: Match[] }) => {
         const isOpen = open === letter;
 
         return (
-          <div key={letter} className="rounded-xl border border-white/5 bg-[#1A2621] overflow-hidden filter drop-shadow-lg">
+          <div key={letter} className="rounded-xl border border-chalk bg-card overflow-hidden filter drop-shadow-lg">
             <button
               type="button"
               onClick={() => setOpen(isOpen ? null : letter)}
@@ -55,7 +55,7 @@ export const Groups = ({ matches }: { matches: Match[] }) => {
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: 0.2 }}
-                  className="overflow-hidden border-t border-dashed border-white/10 bg-black/10"
+                  className="overflow-hidden border-t border-dashed border-paper/10 bg-black/10"
                 >
                   <div className="px-4 md:px-6 py-3 flex flex-col gap-1.5">
                     {played.length === 0 ? (

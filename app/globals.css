@@ -2,9 +2,43 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #0F1A15;
-  --foreground: #E8E6D9;
+/* Dark theme (default). Colors are R G B channels consumed by tailwind.config.ts
+   as rgb(var(--c-x) / <alpha-value>). */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --c-pitch-900: 15 26 21;     /* #0F1A15 page bg */
+  --c-pitch-800: 22 38 31;     /* #16261F card */
+  --c-pitch-700: 30 51 42;     /* #1E332A hover */
+  --c-paper: 232 230 217;      /* #E8E6D9 ink/text (bone) */
+  --c-gold: 212 175 55;        /* #D4AF37 */
+  --c-signal: 255 69 0;        /* #FF4500 */
+  --c-chalk: rgba(232, 230, 217, 0.15);
+  --c-card: 26 38 33;          /* #1A2621 */
+  --c-card-arbiter: 42 26 26;  /* #2A1A1A */
+
+  --grain-opacity: 0.5;
+
+  --background: rgb(var(--c-pitch-900));
+  --foreground: rgb(var(--c-paper));
+}
+
+/* Light theme — warm bone paper / editorial print. */
+[data-theme="light"] {
+  color-scheme: light;
+
+  --c-pitch-900: 230 227 212;  /* #E6E3D4 page bg */
+  --c-pitch-800: 245 243 234;  /* #F5F3EA card */
+  --c-pitch-700: 251 250 243;  /* #FBFAF3 hover */
+  --c-paper: 30 42 34;         /* #1E2A22 dark green ink */
+  --c-gold: 138 109 24;        /* #8A6D18 deep gold */
+  --c-signal: 198 58 0;        /* #C63A00 */
+  --c-chalk: rgba(30, 42, 34, 0.18);
+  --c-card: 240 238 228;       /* #F0EEE4 */
+  --c-card-arbiter: 240 224 224; /* #F0E0E0 light red tint */
+
+  --grain-opacity: 0.25;
 }
 
 body {
@@ -26,10 +60,15 @@ body::before {
   pointer-events: none;
   z-index: 50;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.04'/%3E%3C/svg%3E");
-  opacity: 0.5;
+  opacity: var(--grain-opacity);
 }
+
+/* Theme toggle icon — reflects the *current* theme (moon while dark, sun while
+   light), driven by data-theme so the button needs no JS state. */
+.theme-toggle::after { content: "\263E"; }            /* ☾ */
+[data-theme="light"] .theme-toggle::after { content: "\2600"; } /* ☀ */
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: #0F1A15; }
-::-webkit-scrollbar-thumb { background: #1E332A; border-radius: 3px; }
+::-webkit-scrollbar-track { background: rgb(var(--c-pitch-900)); }
+::-webkit-scrollbar-thumb { background: rgb(var(--c-pitch-700)); border-radius: 3px; }

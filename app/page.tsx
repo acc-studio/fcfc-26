@@ -14,6 +14,7 @@ import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, deleteField 
 import { AuthModal } from '@/components/AuthModal';
 import { RegisterModal } from '@/components/RegisterModal';
 import { ArbiterModal } from '@/components/ArbiterModal';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 export default function WorldCupApp() {
   const [activeTab, setActiveTab] = useState<'next' | 'upcoming' | 'past' | 'groups' | 'bracket' | 'table'>('next');
@@ -300,10 +301,13 @@ export default function WorldCupApp() {
       <div className="pb-24 pt-20 px-6 max-w-2xl lg:max-w-6xl mx-auto">
 
         {/* HEADER */}
-        <div className="flex flex-col items-start mb-12">
-          <h1 className="text-5xl md:text-7xl font-serif font-black tracking-tight leading-[0.9] text-paper">
-            FCFC '26
-          </h1>
+        <div className="mb-12">
+          <div className="flex items-start justify-between gap-4">
+            <h1 className="text-5xl md:text-7xl font-serif font-black tracking-tight leading-[0.9] text-paper">
+              FCFC '26
+            </h1>
+            <ThemeToggle />
+          </div>
           <div className="mt-4 flex items-center gap-4">
             <span className="font-mono text-xs tracking-widest uppercase border-b pb-1 text-gold border-gold">
               AGA

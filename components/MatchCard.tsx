@@ -136,7 +136,7 @@ export const MatchCard = ({
   // Regulation level → the shootout dials decide who goes through.
   const adminLevel = adminScore.home === adminScore.away;
 
-  const CARD_BG_COLOR = showArbiter ? "bg-[#2A1A1A]" : "bg-[#1A2621]";
+  const CARD_BG_COLOR = showArbiter ? "bg-card-arbiter" : "bg-card";
 
   // Other players whose bet on this match is visible (locked / kicked off / done).
   const others = players
@@ -172,7 +172,7 @@ export const MatchCard = ({
       <div className={clsx(
         "flex-1 rounded-l-xl border-y border-l transition-colors duration-300 relative overflow-hidden",
         CARD_BG_COLOR,
-        showArbiter ? "border-signal/30" : "border-white/5"
+        showArbiter ? "border-signal/30" : "border-paper/5"
       )}>
 
         {/* Metadata Header */}
@@ -227,7 +227,7 @@ export const MatchCard = ({
                 )}
               </>
             ) : knockout ? (
-              <span className="rounded border border-white/10 px-2 py-1 font-mono text-[9px] md:text-[11px] uppercase tracking-widest text-paper/50 select-none">
+              <span className="rounded border border-paper/10 px-2 py-1 font-mono text-[9px] md:text-[11px] uppercase tracking-widest text-paper/50 select-none">
                 {STAGE_TAG[match.stage!]}
               </span>
             ) : (
@@ -277,7 +277,7 @@ export const MatchCard = ({
               <FormDots form={awayForm} />
             </button>
             {showForm && (
-              <div className="px-4 md:px-8 pb-3 flex gap-4 border-t border-dashed border-white/5 pt-2">
+              <div className="px-4 md:px-8 pb-3 flex gap-4 border-t border-dashed border-paper/5 pt-2">
                 <FormList team={match.home} form={homeForm} />
                 <FormList team={match.away} form={awayForm} />
               </div>
@@ -321,7 +321,7 @@ export const MatchCard = ({
 
         {/* Penalty shootout takers (knockout only, when the feed supplies them) */}
         {match.shootout?.takers && match.shootout.takers.length > 0 && (
-          <div className="px-4 md:px-8 pb-3 -mt-1 flex flex-col gap-1 relative z-10 border-t border-dashed border-white/5 pt-2">
+          <div className="px-4 md:px-8 pb-3 -mt-1 flex flex-col gap-1 relative z-10 border-t border-dashed border-paper/5 pt-2">
             <div className="font-mono text-[8px] uppercase tracking-[0.2em] text-paper/30 text-center mb-0.5">
               Penalties · {match.shootout.home}-{match.shootout.away}
             </div>
@@ -342,7 +342,7 @@ export const MatchCard = ({
 
         {/* Action area */}
         {showArbiter ? (
-          <div className="border-t border-dashed border-white/10 bg-black/10 p-4 md:p-8">
+          <div className="border-t border-dashed border-paper/10 bg-black/10 p-4 md:p-8">
             <div className="flex flex-col gap-4 md:gap-6">
               <div className="flex justify-center gap-4 md:gap-10">
                 <ScoreDial label="Home" value={adminScore.home} onChange={(v) => setAdminScore(p => ({ ...p, home: v }))} />
@@ -372,7 +372,7 @@ export const MatchCard = ({
                           onClick={() => setAdminAdvance(side)}
                           className={clsx(
                             "px-3 py-1.5 rounded border font-mono text-[10px] uppercase tracking-widest transition-colors",
-                            active ? "border-signal/60 bg-signal/15 text-signal" : "border-white/10 text-paper/50",
+                            active ? "border-signal/60 bg-signal/15 text-signal" : "border-paper/10 text-paper/50",
                             auto ? "cursor-default" : "cursor-pointer hover:border-signal/40"
                           )}
                         >
@@ -408,7 +408,7 @@ export const MatchCard = ({
             </div>
           </div>
         ) : notYetOpen ? null : (
-          <div className="border-t border-dashed border-white/10 bg-black/10 px-4 pt-3 pb-4 md:px-8 flex flex-col gap-3">
+          <div className="border-t border-dashed border-paper/10 bg-black/10 px-4 pt-3 pb-4 md:px-8 flex flex-col gap-3">
             {!activeUser && !isFinished && (
               <div className="text-center font-mono text-[10px] uppercase tracking-widest text-gold/70 flex items-center justify-center gap-1.5">
                 <span>🔒</span> Select your profile above to bet
@@ -473,9 +473,9 @@ export const MatchCard = ({
         )}
 
         {/* Perforation Dots */}
-        <div className="absolute right-0 top-0 bottom-0 w-[1px] border-r border-dashed border-white/10" />
-        <div className="absolute -right-1.5 top-[-6px] w-3 h-3 rounded-full bg-[#0F1A15] z-20 shadow-[inset_0_-1px_2px_rgba(0,0,0,0.5)]" />
-        <div className="absolute -right-1.5 bottom-[-6px] w-3 h-3 rounded-full bg-[#0F1A15] z-20 shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]" />
+        <div className="absolute right-0 top-0 bottom-0 w-[1px] border-r border-dashed border-chalk" />
+        <div className="absolute -right-1.5 top-[-6px] w-3 h-3 rounded-full bg-pitch-900 z-20 shadow-[inset_0_-1px_2px_rgba(0,0,0,0.5)]" />
+        <div className="absolute -right-1.5 bottom-[-6px] w-3 h-3 rounded-full bg-pitch-900 z-20 shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]" />
       </div>
 
       {/* --- RIGHT SIDE: Stub (status) --- */}

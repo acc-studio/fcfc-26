@@ -127,7 +127,7 @@ export const Pitch = ({ home, away, homeNote, awayNote }: {
     )}
 
     <div
-      className="relative w-full aspect-[3/4] rounded-lg overflow-hidden border border-white/10"
+      className="relative w-full aspect-[3/4] rounded-lg overflow-hidden border border-paper/10"
       style={{
         background: 'repeating-linear-gradient(to bottom, #16271E 0 8.33%, #1B2E23 8.33% 16.66%)',
         containerType: 'inline-size',
