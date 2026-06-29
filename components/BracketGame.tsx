@@ -8,7 +8,7 @@ import {
 } from '@/lib/data';
 import { Flag } from './Flag';
 import { Emoji } from './Emoji';
-import { NODE_W, CONN_W, TOTAL, Connector, STAGE_LABEL } from './Bracket';
+import { NODE_W, CONN_W, TOTAL, Connector, STAGE_LABEL, RadialBracket } from './Bracket';
 
 const TOTAL_PICKS = BRACKET_MATCH_IDS.length;   // 31 ties to fill
 
@@ -109,6 +109,32 @@ const PredTree = ({ picks, byId, mode, onPick }: {
     </div>
   </div>
 );
+
+// A locked bracket shown radially (same circle as the live bracket): each inner
+// node is the predicted advancer, the outer ring its R32 competitors. Once a
+// real tie settles, the prediction colours green (right) or red (wrong).
+const RadialPred = ({ picks, byId }: { picks: Record<number, string>; byId: Map<number, Match> }) => {
+  const leaf = (matchId: number, side: 'HOME' | 'AWAY') => {
+    const m = byId.get(matchId);
+    const team = side === 'HOME' ? m?.home : m?.away;
+    const pick = picks[matchId];
+    if (!team || team !== pick) return { team, tone: 'dim' as const };   // not predicted to advance
+    const out = m && m.status === 'FINISHED' ? outcomeOf(m) : null;
+    if (out !== 'HOME' && out !== 'AWAY') return { team, tone: 'win' as const };
+    const actual = out === 'HOME' ? m!.home : m!.away;
+    return { team, tone: pick === actual ? ('correct' as const) : ('wrong' as const) };
+  };
+  const node = (id: number) => {
+    const pick = picks[id];
+    if (!pick) return { team: undefined, tone: 'none' as const };
+    const m = byId.get(id);
+    const out = m && m.status === 'FINISHED' ? outcomeOf(m) : null;
+    if (out !== 'HOME' && out !== 'AWAY') return { team: pick, tone: 'win' as const };
+    const actual = out === 'HOME' ? m!.home : m!.away;
+    return { team: pick, tone: pick === actual ? ('correct' as const) : ('wrong' as const) };
+  };
+  return <RadialBracket leaf={leaf} node={node} />;
+};
 
 // Predicted champion = the winner the user sent through the final (match 104).
 const Champion = ({ team, label }: { team?: string; label: string }) => (
@@ -334,7 +360,7 @@ export const BracketGame = ({ matches, players, currentUser, brackets, onLock }:
                       className="border-t border-chalk p-3"
                     >
                       <div className="mb-2"><Champion team={viewBracket.picks[104]} label={`${viewPlayer.name}'s champion`} /></div>
-                      <PredTree picks={viewBracket.picks} byId={byId} mode="view" />
+                      <RadialPred picks={viewBracket.picks} byId={byId} />
                       {viewAcc && viewAcc.decided > 0 && (
                         <p className="mt-2 font-mono text-[10px] text-paper/40">
                           {viewAcc.correct}/{viewAcc.decided} ties called right so far
