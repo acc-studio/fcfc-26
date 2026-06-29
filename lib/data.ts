@@ -667,13 +667,18 @@ export function buildTeamForm(matches: Match[], n = 5): Record<string, FormMatch
     if (list.length >= n) return;
     const gf = (home ? m.result_home : m.result_away) as number;
     const ga = (home ? m.result_away : m.result_home) as number;
-    list.push({
-      date: m.date,
-      opponent: home ? m.away : m.home,
-      gf, ga,
-      result: gf > ga ? 'W' : gf < ga ? 'L' : 'D',
-      competition: wcStageLabel(m),
-    });
+    // Knockouts have no draws — settle W/L by who advanced (so a penalty win is
+    // a win), falling back to the scoreline only if `advance` is somehow unset.
+    let result: 'W' | 'D' | 'L';
+    if (isKnockout(m)) {
+      const adv = outcomeOf(m); // 'HOME' | 'AWAY' (reads m.advance for knockouts)
+      result = (adv === 'HOME' || adv === 'AWAY')
+        ? (adv === (home ? 'HOME' : 'AWAY') ? 'W' : 'L')
+        : (gf > ga ? 'W' : gf < ga ? 'L' : 'D');
+    } else {
+      result = gf > ga ? 'W' : gf < ga ? 'L' : 'D';
+    }
+    list.push({ date: m.date, opponent: home ? m.away : m.home, gf, ga, result, competition: wcStageLabel(m) });
   };
   for (const m of finished) { add(m.home, m, true); add(m.away, m, false); }
   return out;

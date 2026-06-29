@@ -33,7 +33,7 @@ const PitchName = ({ name }: { name: string }) => {
   }, [name]);
   return (
     <span ref={box} className="mt-1 w-full overflow-hidden text-center">
-      <span ref={txt} className="inline-block whitespace-nowrap leading-tight text-paper text-[clamp(10px,3.3cqw,20px)] [text-shadow:0_1px_3px_rgba(0,0,0,0.9)]">
+      <span ref={txt} className="inline-block whitespace-nowrap leading-tight text-[#E8E6D9] text-[clamp(10px,3.3cqw,20px)] [text-shadow:0_1px_3px_rgba(0,0,0,0.9)]">
         {name}
       </span>
     </span>
@@ -95,8 +95,10 @@ const Chip = ({ p, x, y, side }: { p: LineupPlayer; x: number; y: number; side: 
     style={{ left: `${x}%`, top: `${y}%` }}
   >
     <div className={clsx(
-      "rounded-full flex items-center justify-center font-mono font-bold border border-pitch-900/40 w-[clamp(20px,8cqw,48px)] h-[clamp(20px,8cqw,48px)] text-[clamp(10px,3.6cqw,22px)]",
-      side === 'home' ? "bg-paper text-pitch-900" : "bg-gold text-pitch-900"
+      // Fixed colours: the pitch is always dark green in both themes, so these
+      // must not flip with the theme (home bone jersey, away gold, dark numbers).
+      "rounded-full flex items-center justify-center font-mono font-bold border border-black/40 w-[clamp(20px,8cqw,48px)] h-[clamp(20px,8cqw,48px)] text-[clamp(10px,3.6cqw,22px)]",
+      side === 'home' ? "bg-[#E8E6D9] text-[#0F1A15]" : "bg-[#D4AF37] text-[#0F1A15]"
     )}>
       {p.jersey}
     </div>

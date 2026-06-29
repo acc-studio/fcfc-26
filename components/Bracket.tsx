@@ -147,7 +147,11 @@ interface RadialBracketProps {
 // The pure circular bracket — geometry + flags only. Callers decide what each
 // slot shows (live results vs. a prediction) and whether it's interactive.
 export const RadialBracket = ({ leaf, node, onSelect, selectedId }: RadialBracketProps) => (
-  <div className="relative mx-auto aspect-square w-full max-w-[560px]">
+  // Scroll horizontally on narrow screens: the 32 outer-ring flags are fixed-px,
+  // so the circle needs a minimum diameter or they overlap. Below ~500px the
+  // wrapper pans instead of cramming everything on top of each other.
+  <div className="overflow-x-auto no-scrollbar">
+   <div className="relative mx-auto aspect-square w-full min-w-[500px] max-w-[560px]">
     <svg viewBox={`0 0 ${VIEW} ${VIEW}`} className="absolute inset-0 h-full w-full" aria-hidden>
       {RADIAL.connectors.map((d, i) => (
         <path key={i} d={d} fill="none" stroke={RADIAL_STROKE} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
@@ -188,6 +192,7 @@ export const RadialBracket = ({ leaf, node, onSelect, selectedId }: RadialBracke
         ? <button key={id} type="button" onClick={() => onSelect(id)} style={style} className={clsx(cls, 'touch-manipulation')} aria-label={team ?? (isFinal ? 'Final' : 'Match')}>{chip}</button>
         : <span key={id} style={style} className={cls}>{chip}</span>;
     })}
+   </div>
   </div>
 );
 
