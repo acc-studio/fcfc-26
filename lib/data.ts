@@ -426,6 +426,95 @@ export function computeKnockoutStats(
   return { koFinished: ko.length, records, hero, bottler };
 }
 
+// --- Confederation affinities ---------------------------------------------
+// Which confederation each WC-2026 nation belongs to (mirrors the grouped
+// TEAM_ISO comments below). Used to tag who you back when you pick a team to
+// win, so the lab can crown the punter most loyal to each region.
+export type Confederation = 'UEFA' | 'CONMEBOL' | 'CONCACAF' | 'CAF' | 'AFC' | 'OFC';
+
+export const TEAM_CONFEDERATION: Record<string, Confederation> = {
+  // CONCACAF (incl. hosts)
+  Canada: 'CONCACAF', Mexico: 'CONCACAF', USA: 'CONCACAF',
+  'Curaçao': 'CONCACAF', Haiti: 'CONCACAF', Panama: 'CONCACAF',
+  // AFC
+  Australia: 'AFC', Iran: 'AFC', Iraq: 'AFC', Japan: 'AFC', Jordan: 'AFC',
+  'South Korea': 'AFC', Qatar: 'AFC', 'Saudi Arabia': 'AFC', Uzbekistan: 'AFC',
+  // CAF
+  Algeria: 'CAF', 'Cape Verde': 'CAF', 'Ivory Coast': 'CAF', 'DR Congo': 'CAF',
+  Egypt: 'CAF', Ghana: 'CAF', Morocco: 'CAF', Senegal: 'CAF',
+  'South Africa': 'CAF', Tunisia: 'CAF',
+  // CONMEBOL
+  Argentina: 'CONMEBOL', Brazil: 'CONMEBOL', Colombia: 'CONMEBOL',
+  Ecuador: 'CONMEBOL', Paraguay: 'CONMEBOL', Uruguay: 'CONMEBOL',
+  // OFC
+  'New Zealand': 'OFC',
+  // UEFA
+  Austria: 'UEFA', Belgium: 'UEFA', 'Bosnia and Herzegovina': 'UEFA',
+  Croatia: 'UEFA', Czechia: 'UEFA', England: 'UEFA', France: 'UEFA',
+  Germany: 'UEFA', Netherlands: 'UEFA', Norway: 'UEFA', Portugal: 'UEFA',
+  Scotland: 'UEFA', Spain: 'UEFA', Sweden: 'UEFA', Switzerland: 'UEFA',
+  'Türkiye': 'UEFA',
+};
+
+export const CONFEDERATIONS: Confederation[] = ['UEFA', 'CONMEBOL', 'CONCACAF', 'CAF', 'AFC', 'OFC'];
+
+// The team a committed pick backs to win — HOME/AWAY name a side; a DRAW backs
+// nobody. (An unresolved knockout placeholder isn't a real team, so it later
+// maps to no confederation and is skipped.)
+function backedTeam(pick: Pick | undefined, m: Match): string | undefined {
+  if (pick === 'HOME') return m.home;
+  if (pick === 'AWAY') return m.away;
+  return undefined;
+}
+
+export interface AffinityRecord {
+  id: string;
+  name: string;
+  avatar: string;
+  count: number;   // picks backing this confederation's teams
+}
+
+// For each confederation, the punter who has backed its teams the most — every
+// pick that names a team to win counts (draws and unresolved knockout slots
+// don't). Ties break to the alphabetically-first name (deterministic). Returns
+// the leader (or null if nobody backed that region) keyed by confederation.
+export function computeAffinityStats(
+  users: Player[],
+  bets: Record<string, Bet | undefined>,
+  matches: Match[],
+): Record<Confederation, AffinityRecord | null> {
+  const byId = new Map<number, Match>();
+  for (const m of matches) byId.set(m.id, m);
+  const userById = new Map(users.map(u => [u.id, u]));
+
+  const counts: Record<string, Record<Confederation, number>> = {};
+  for (const u of users) counts[u.id] = { UEFA: 0, CONMEBOL: 0, CONCACAF: 0, CAF: 0, AFC: 0, OFC: 0 };
+
+  for (const key in bets) {
+    const bet = bets[key];
+    if (!bet || !userById.has(bet.user_id)) continue; // skip ignored / unknown punters
+    const m = byId.get(bet.match_id);
+    if (!m) continue;
+    const team = backedTeam(bet.pick, m);
+    const confed = team ? TEAM_CONFEDERATION[team] : undefined;
+    if (confed) counts[bet.user_id][confed]++;
+  }
+
+  const result = {} as Record<Confederation, AffinityRecord | null>;
+  for (const c of CONFEDERATIONS) {
+    let best: AffinityRecord | null = null;
+    for (const u of users) {
+      const count = counts[u.id][c];
+      if (count <= 0) continue;
+      if (!best || count > best.count || (count === best.count && u.name.localeCompare(best.name) < 0)) {
+        best = { id: u.id, name: u.name, avatar: u.avatar, count };
+      }
+    }
+    result[c] = best;
+  }
+  return result;
+}
+
 // Display order of the knockout tree, fixed by the seed's feeder map so each
 // round's nodes sit between the two matches that feed them (top→bottom). Used by
 // the Bracket tab. The third-place match is a side fixture, kept out of the tree.

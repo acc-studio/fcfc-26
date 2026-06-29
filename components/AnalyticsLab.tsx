@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
-import { computePunterStats, computeCrowdStats, computeKnockoutStats, computeValueStats, type PunterStat } from '@/lib/data';
+import { computePunterStats, computeCrowdStats, computeKnockoutStats, computeValueStats, computeAffinityStats, type PunterStat, type Confederation } from '@/lib/data';
 import { Emoji, isDistortedFace, DISTORTED_FACE_SRC } from '@/components/Emoji';
 
 // Distinct line colours for the race. Warm/editorial palette that sits inside
@@ -216,6 +216,17 @@ const RaceChart = ({ visible, allStats, steps }: { visible: PunterStat[]; allSta
   );
 };
 
+// Each confederation's affinity title + emoji — the punter who backs its teams
+// the most wears the (deliberately tongue-in-cheek) crown.
+const AFFINITY_META: { confed: Confederation; title: string; emoji: string }[] = [
+  { confed: 'UEFA', title: 'Colonialist', emoji: '🎩' },
+  { confed: 'CONMEBOL', title: 'Sambist', emoji: '💃' },
+  { confed: 'CAF', title: 'Blacked', emoji: '🌍' },
+  { confed: 'CONCACAF', title: 'Cowboy', emoji: '🤠' },
+  { confed: 'AFC', title: 'Tempura', emoji: '🍤' },
+  { confed: 'OFC', title: 'Surfer', emoji: '🏄' },
+];
+
 export const AnalyticsLab = ({ users, bets, matches, onBack }: any) => {
   const { finished, stats } = useMemo(
     () => computePunterStats(users, bets, matches),
@@ -259,6 +270,9 @@ export const AnalyticsLab = ({ users, bets, matches, onBack }: any) => {
 
   // Knockout-only records (Knockout Hero / Bottler).
   const ko = useMemo(() => computeKnockoutStats(users, bets, matches), [users, bets, matches]);
+
+  // Confederation affinities: who backs each region's teams the most.
+  const affinities = useMemo(() => computeAffinityStats(users, bets, matches), [users, bets, matches]);
 
   // Value Table: rarity-weighted scoring that rewards calling outcomes the crowd
   // missed (risky-but-right banks more than safe-and-right).
@@ -400,6 +414,31 @@ export const AnalyticsLab = ({ users, bets, matches, onBack }: any) => {
                 ? `${crowd.gambler.risky} risky bet${crowd.gambler.risky === 1 ? '' : 's'} · ${Math.round((crowd.gambler.hits / crowd.gambler.risky) * 100)}% hit`
                 : 'no risky bets yet'}
             />
+          </div>
+
+          {/* Affinities — who backs each confederation's teams the most */}
+          <div className="mb-1 font-mono text-[10px] uppercase tracking-widest text-paper/40 border-b border-chalk pb-2">
+            Affinities
+          </div>
+          <p className="mb-3 font-mono text-[10px] leading-relaxed text-paper/35">
+            most picks backing each confederation&rsquo;s teams
+          </p>
+          <div className="grid grid-cols-2 gap-3 mb-10">
+            {AFFINITY_META.map(({ confed, title, emoji }, i) => {
+              const leader = affinities[confed];
+              return (
+                <StatCard
+                  key={confed}
+                  label={title}
+                  emoji={emoji}
+                  tint={i % 2 === 0 ? 'hot' : 'cold'}
+                  primary={leader ? <><Emoji emoji={leader.avatar} /> {leader.name}</> : '—'}
+                  secondary={leader
+                    ? `${confed} · ${leader.count} pick${leader.count === 1 ? '' : 's'} backed`
+                    : `no ${confed} love yet`}
+                />
+              );
+            })}
           </div>
 
           {/* Knockout records — only once the bracket has produced results */}
