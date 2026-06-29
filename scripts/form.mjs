@@ -10,7 +10,7 @@
 // (1 team list + 48 schedules). The feed is unofficial — a failed team is
 // skipped, never fatal.
 
-import { doc, setDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc } from 'firebase/firestore';
 import { connectAsArbiter } from './connect.mjs';
 
 // ESPN display name -> our canonical name (matches fixtures / TEAM_ISO).
@@ -28,6 +28,12 @@ const ALIASES = {
 };
 const canon = (n) => ALIASES[n] ?? n;
 
+// Order-stable signature of a form array, for change detection. Firestore
+// returns map keys sorted (not in insertion order), so JSON.stringify of a
+// read-back doc wouldn't match a freshly-built one — compare named fields.
+const formSig = (form) =>
+  (form || []).map((f) => `${f.date}|${f.opponent}|${f.gf}|${f.ga}|${f.result}|${f.competition}`).join('~');
+
 const TEAMS_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/teams';
 const schedUrl = (id) => `https://site.api.espn.com/apis/site/v2/sports/soccer/all/teams/${id}/schedule`;
 
@@ -44,7 +50,19 @@ async function main() {
 
   const { db, cleanup } = await connectAsArbiter();
 
-  let written = 0;
+  // Existing form docs, so we only write the teams whose last-5 actually
+  // changed. form refreshes every poll cycle now (same cadence as scores), and
+  // a team's form only moves when it plays — unconditional writes would blow
+  // Firestore's free-tier write quota, so skip the unchanged ones.
+  const existing = new Map();
+  try {
+    const snap = await getDocs(collection(db, 'teams'));
+    snap.forEach((d) => existing.set(d.id, d.data()));
+  } catch (e) {
+    console.warn(`could not read existing form (will write all): ${e.message}`);
+  }
+
+  let written = 0, skipped = 0;
   for (const t of teams) {
     try {
       const sch = await fetchJson(schedUrl(t.id));
@@ -66,6 +84,13 @@ async function main() {
         };
       });
       const name = canon(t.displayName);
+      // Skip the write when the last-5 is byte-for-byte unchanged (ignore the
+      // updatedAt-only diff) — keeps writes near-zero on a quiet cycle.
+      const prev = existing.get(name);
+      if (prev && formSig(prev.form) === formSig(form)) {
+        skipped++;
+        continue;
+      }
       await setDoc(doc(db, 'teams', name), { name, form, updatedAt: new Date().toISOString() });
       written++;
       console.log(`${name}: ${form.map((f) => f.result).join('') || '(none)'}`);
@@ -75,7 +100,7 @@ async function main() {
   }
 
   await cleanup();
-  console.log(`Wrote form for ${written}/${teams.length} teams.`);
+  console.log(`Form: ${written} written, ${skipped} unchanged (of ${teams.length}).`);
   process.exit(0);
 }
 

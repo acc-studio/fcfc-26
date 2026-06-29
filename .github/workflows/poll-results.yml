@@ -3,7 +3,8 @@ name: Poll live results
 # Pulls the ESPN World Cup feed and writes live scores / scorers / final
 # results into Firestore (scripts/poll.mjs). The app streams them to clients
 # via its existing onSnapshot listeners. The same run also refreshes team form
-# (scripts/form.mjs) once an hour, so one external trigger keeps both current.
+# (scripts/form.mjs) and sends push notifications (scripts/notify.ts), so one
+# external trigger keeps scores, form, and alerts on a single cadence.
 #
 # Setup: add these repo secrets (Settings -> Secrets and variables -> Actions),
 # the same values as .env.local:
@@ -19,7 +20,7 @@ name: Poll live results
 #
 # Reliable cadence: GitHub's `schedule` is best-effort and drops runs under load,
 # so the cron above is only a fallback. For a guaranteed interval, trigger this
-# workflow from an external scheduler (e.g. free cron-job.org) every 10 min:
+# workflow from an external scheduler (e.g. free cron-job.org) — currently ~2 min:
 #   POST https://api.github.com/repos/acc-studio/fcfc-26/actions/workflows/poll-results.yml/dispatches
 #   Headers: Authorization: Bearer <PAT>, Accept: application/vnd.github+json,
 #            X-GitHub-Api-Version: 2022-11-28
@@ -77,14 +78,8 @@ jobs:
       # Analytics-Lab title changes). No-ops if the VAPID secrets are unset.
       - name: Send push notifications
         run: npx tsx scripts/notify.ts
-      # Form changes rarely, so refresh it ~once an hour: this workflow fires
-      # every ~10 min (external trigger), and only the run landing in the first
-      # 10 minutes of the hour does the form pass.
-      - name: Refresh team form (hourly)
-        run: |
-          min=$(date -u +%M)
-          if (( 10#$min < 10 )); then
-            node scripts/form.mjs
-          else
-            echo "Skipping form refresh — not the top of the hour."
-          fi
+      # Refresh team form every run too, so the W/D/L strips update on the same
+      # cadence as scores. form.mjs only writes the teams whose last-5 actually
+      # changed, so this stays cheap on Firestore even at a 2-minute cadence.
+      - name: Refresh team form
+        run: node scripts/form.mjs
