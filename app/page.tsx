@@ -2,12 +2,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
-import { Match, Player, Pick, FormMatch, kickoffMs, BET_WINDOW_MS, isKnockout, teamsResolved } from '@/lib/data';
+import { Match, Player, Pick, FormMatch, BracketPrediction, kickoffMs, BET_WINDOW_MS, isKnockout, teamsResolved } from '@/lib/data';
 import { MatchCard } from '@/components/MatchCard';
 import { Emoji } from '@/components/Emoji';
 import { Leaderboard } from '@/components/Leaderboard';
 import { Groups } from '@/components/Groups';
 import { Bracket } from '@/components/Bracket';
+import { BracketGame } from '@/components/BracketGame';
 import { auth, db } from '@/lib/firebase';
 import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { AuthModal } from '@/components/AuthModal';
@@ -31,6 +32,8 @@ export default function WorldCupApp() {
   const [bets, setBets] = useState<Record<string, any>>({});
   // Recent form by canonical team name, from the `teams` collection.
   const [teamForm, setTeamForm] = useState<Record<string, FormMatch[]>>({});
+  // Locked "Build Your Bracket" predictions, keyed by player id.
+  const [brackets, setBrackets] = useState<Record<string, BracketPrediction>>({});
   const [isLoading, setIsLoading] = useState(true);
   // Refreshed every minute so the 48h betting window closes live.
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -82,6 +85,16 @@ export default function WorldCupApp() {
       setTeamForm(map);
     });
 
+    // Live brackets: `brackets/{user_id}` -> a player's locked prediction.
+    const unsubBrackets = onSnapshot(collection(db, 'brackets'), (snap) => {
+      const map: Record<string, BracketPrediction> = {};
+      snap.docs.forEach((d) => {
+        const row = d.data() as BracketPrediction;
+        if (row.picks) map[row.user_id ?? d.id] = row;
+      });
+      setBrackets(map);
+    });
+
     const tick = setInterval(() => setNowMs(Date.now()), 60_000);
 
     return () => {
@@ -89,6 +102,7 @@ export default function WorldCupApp() {
       unsubBets();
       unsubPlayers();
       unsubTeams();
+      unsubBrackets();
       clearInterval(tick);
     };
   }, []);
@@ -212,6 +226,20 @@ export default function WorldCupApp() {
       advance: deleteField(),
       shootout: deleteField(),
     });
+  };
+
+  // Commit a "Build Your Bracket" prediction. Written once and locked — the
+  // rules reject any later update, so it's permanent (matches the UI warning).
+  const handleLockBracket = async (picks: Record<number, string>) => {
+    if (!currentUser || brackets[currentUser]?.locked) return;
+    const payload: BracketPrediction = {
+      user_id: currentUser,
+      picks,
+      locked: true,
+      updatedAt: new Date().toISOString(),
+    };
+    setBrackets(prev => ({ ...prev, [currentUser]: payload }));
+    await setDoc(doc(db, 'brackets', currentUser), payload);
   };
 
   const handleUserClick = (player: Player) => {
@@ -475,6 +503,14 @@ export default function WorldCupApp() {
                 transition={{ duration: 0.3 }}
               >
                 <Bracket matches={matches} players={visiblePlayers} bets={bets} currentUser={currentUser || ''} />
+                <div className="my-10 border-t border-chalk" />
+                <BracketGame
+                  matches={matches}
+                  players={visiblePlayers}
+                  currentUser={currentUser || ''}
+                  brackets={brackets}
+                  onLock={handleLockBracket}
+                />
               </motion.div>
             )}
 

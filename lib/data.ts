@@ -438,6 +438,88 @@ export const BRACKET_ROUNDS: { stage: Stage; ids: number[] }[] = [
 ];
 export const THIRD_PLACE_ID = 103;
 
+// --- Build Your Bracket (prediction minigame) -----------------------------
+// Feeder map for the knockout tree: each parent node's two competitors are the
+// WINNERS of these two matches (the slot labels in scripts/seed-knockout.mjs).
+// R32 nodes (73–88) have no feeders — their teams come from the group stage.
+// The third-place play-off (103) is fed by the SF *losers* and is left out of
+// the bracket game.
+export const BRACKET_FEEDERS: Record<number, [number, number]> = {
+  89: [74, 77], 90: [73, 75], 91: [76, 78], 92: [79, 80],
+  93: [83, 84], 94: [81, 82], 95: [86, 88], 96: [85, 87],
+  97: [89, 90], 98: [93, 94], 99: [91, 92], 100: [95, 96],
+  101: [97, 98], 102: [99, 100], 104: [101, 102],
+};
+
+// Every bracket node id (R32 → Final), excluding the third-place game — the 31
+// matches a completed bracket prediction must cover.
+export const BRACKET_MATCH_IDS: number[] = BRACKET_ROUNDS.flatMap(r => r.ids);
+
+// A player's "Build Your Bracket" prediction: the team they expect to advance
+// from each bracket node (matchId → team name). Stored in `brackets/{user_id}`;
+// permanent once `locked`.
+export interface BracketPrediction {
+  user_id: string;
+  picks: Record<number, string>;   // matchId -> predicted advancing team name
+  locked: boolean;
+  updatedAt?: string;
+}
+
+// The two competitors at a bracket node for a given set of picks. R32 nodes read
+// the live fixture teams; every higher node reads the predicted winners of its
+// two feeder matches (undefined until both feeders are picked).
+export function bracketSides(
+  id: number,
+  picks: Record<number, string>,
+  byId: Map<number, Match>,
+): { home?: string; away?: string } {
+  const feeders = BRACKET_FEEDERS[id];
+  if (!feeders) {
+    const m = byId.get(id);
+    return { home: m?.home, away: m?.away };
+  }
+  return { home: picks[feeders[0]], away: picks[feeders[1]] };
+}
+
+// After a pick changes, drop any higher-round pick that's no longer one of its
+// node's two (re-derived) competitors — e.g. you switched a R32 winner, so the
+// R16 pick that named the old winner is now stale. Processing rounds low→high in
+// one pass cascades the clears all the way to the final.
+export function prunePicks(
+  picks: Record<number, string>,
+  byId: Map<number, Match>,
+): Record<number, string> {
+  const next = { ...picks };
+  for (const round of BRACKET_ROUNDS) {
+    for (const id of round.ids) {
+      if (!BRACKET_FEEDERS[id]) continue; // R32 competitors are fixed fixtures
+      const { home, away } = bracketSides(id, next, byId);
+      const pick = next[id];
+      if (pick && pick !== home && pick !== away) delete next[id];
+    }
+  }
+  return next;
+}
+
+// How many of a bracket's predicted advancers match reality. Counts every
+// finished bracket node with a settled winner; a pick is correct when the team
+// it named actually advanced. pct is null until at least one node is decided.
+export function bracketAccuracy(
+  picks: Record<number, string>,
+  byId: Map<number, Match>,
+): { correct: number; decided: number; pct: number | null } {
+  let correct = 0, decided = 0;
+  for (const id of BRACKET_MATCH_IDS) {
+    const m = byId.get(id);
+    if (!m || m.status !== 'FINISHED') continue;
+    const out = outcomeOf(m);
+    if (out !== 'HOME' && out !== 'AWAY') continue; // need a settled advancer
+    decided++;
+    if (picks[id] === (out === 'HOME' ? m.home : m.away)) correct++;
+  }
+  return { correct, decided, pct: decided > 0 ? Math.round((correct / decided) * 100) : null };
+}
+
 // --- Recent form ----------------------------------------------------------
 // A nation's recent results across all competitions, fetched from ESPN by
 // scripts/form.mjs and stored in `teams/{name}` docs. Display-only.

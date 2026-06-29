@@ -78,5 +78,24 @@ service cloud.firestore {
         && request.resource.data.user_id is string;
       allow delete: if isArbiter();
     }
+
+    // Build-Your-Bracket predictions: world-readable (everyone can view each
+    // other's locked bracket). A bracket is written once, locked, and is then
+    // permanent — `update` is allowed only while the stored doc is still
+    // unlocked, so a locked prediction can never be retconned after results land.
+    // Deletes are arbiter-only (reset). Doc id is the player id.
+    match /brackets/{userId} {
+      allow read: if true;
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasAll(['user_id', 'picks', 'locked'])
+        && request.resource.data.user_id is string
+        && request.resource.data.picks is map
+        && request.resource.data.locked is bool;
+      allow update: if request.auth != null
+        && resource.data.locked == false
+        && request.resource.data.picks is map
+        && request.resource.data.locked is bool;
+      allow delete: if isArbiter();
+    }
   }
 }

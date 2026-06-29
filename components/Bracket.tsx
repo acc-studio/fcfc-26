@@ -10,13 +10,13 @@ import { Emoji } from './Emoji';
 // in a slot of height H*2^r, so the whole bracket is always H*16 tall and a
 // flex column with `justify-around` centers node i at H*2^r*(i+0.5). The SVG
 // connectors are drawn from those exact centers, so they always line up.
-const H = 64;            // R32 slot height (px)
-const TOTAL = H * 16;    // full bracket height
-const NODE_W = 156;
-const CONN_W = 30;
+export const H = 64;            // R32 slot height (px)
+export const TOTAL = H * 16;    // full bracket height
+export const NODE_W = 156;
+export const CONN_W = 30;
 const STROKE = 'rgba(255,255,255,0.14)';
 
-const STAGE_LABEL: Record<string, string> = {
+export const STAGE_LABEL: Record<string, string> = {
   R32: 'Round of 32', R16: 'Round of 16', QF: 'Quarter-finals', SF: 'Semi-finals', FINAL: 'Final',
 };
 
@@ -103,7 +103,7 @@ const Node = ({ m, slotH, open, onToggle, pickers }: {
 };
 
 // SVG elbow connectors between round r and r+1, drawn from the exact node centers.
-const Connector = ({ r }: { r: number }) => {
+export const Connector = ({ r }: { r: number }) => {
   const childSlot = H * Math.pow(2, r);
   const parents = BRACKET_ROUNDS[r + 1].ids.length;
   const paths: string[] = [];
