@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
-import { Match, Player, Pick, FormMatch, BracketPrediction, kickoffMs, BET_WINDOW_MS, isKnockout, teamsResolved } from '@/lib/data';
+import { Match, Player, Pick, BracketPrediction, kickoffMs, BET_WINDOW_MS, isKnockout, teamsResolved, buildTeamForm } from '@/lib/data';
 import { MatchCard } from '@/components/MatchCard';
 import { Emoji } from '@/components/Emoji';
 import { Leaderboard } from '@/components/Leaderboard';
@@ -32,8 +32,6 @@ export default function WorldCupApp() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [bets, setBets] = useState<Record<string, any>>({});
-  // Recent form by canonical team name, from the `teams` collection.
-  const [teamForm, setTeamForm] = useState<Record<string, FormMatch[]>>({});
   // Locked "Build Your Bracket" predictions, keyed by player id.
   const [brackets, setBrackets] = useState<Record<string, BracketPrediction>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -77,16 +75,6 @@ export default function WorldCupApp() {
       setPlayers(rows);
     });
 
-    // Recent form: `teams/{name}` -> { name, form[] }, keyed by team name.
-    const unsubTeams = onSnapshot(collection(db, 'teams'), (snap) => {
-      const map: Record<string, FormMatch[]> = {};
-      snap.docs.forEach((d) => {
-        const row = d.data() as { name?: string; form?: FormMatch[] };
-        if (Array.isArray(row.form)) map[row.name ?? d.id] = row.form;
-      });
-      setTeamForm(map);
-    });
-
     // Live brackets: `brackets/{user_id}` -> a player's locked prediction.
     const unsubBrackets = onSnapshot(collection(db, 'brackets'), (snap) => {
       const map: Record<string, BracketPrediction> = {};
@@ -103,7 +91,6 @@ export default function WorldCupApp() {
       unsubMatches();
       unsubBets();
       unsubPlayers();
-      unsubTeams();
       unsubBrackets();
       clearInterval(tick);
     };
@@ -138,6 +125,11 @@ export default function WorldCupApp() {
   // Roster minus anyone this viewer has muted — fed to the cards, bracket and
   // analytics so ignored players vanish from bet displays and stats.
   const visiblePlayers = useMemo(() => players.filter(p => !ignored.has(p.id)), [players, ignored]);
+
+  // Recent form, derived live from the fixtures we already stream — no ESPN feed
+  // and no `teams` collection (the nations only play WC games now). Keyed by
+  // team name, same shape the form strip consumed before.
+  const teamForm = useMemo(() => buildTeamForm(matches), [matches]);
 
   // A match is bettable now if it kicks off within the 48h window — and, for a
   // knockout slot, only once the feeding round has resolved it to two real

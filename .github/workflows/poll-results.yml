@@ -1,10 +1,10 @@
 name: Poll live results
 
 # Pulls the ESPN World Cup feed and writes live scores / scorers / final
-# results into Firestore (scripts/poll.mjs). The app streams them to clients
-# via its existing onSnapshot listeners. The same run also refreshes team form
-# (scripts/form.mjs) and sends push notifications (scripts/notify.ts), so one
-# external trigger keeps scores, form, and alerts on a single cadence.
+# results into Firestore (scripts/poll.mjs), then sends push notifications
+# (scripts/notify.ts) for the changes. The app streams scores to clients via its
+# onSnapshot listeners; team form is derived client-side from those same matches
+# (no separate feed), so one external trigger keeps everything on one cadence.
 #
 # Setup: add these repo secrets (Settings -> Secrets and variables -> Actions),
 # the same values as .env.local:
@@ -78,8 +78,3 @@ jobs:
       # Analytics-Lab title changes). No-ops if the VAPID secrets are unset.
       - name: Send push notifications
         run: npx tsx scripts/notify.ts
-      # Refresh team form every run too, so the W/D/L strips update on the same
-      # cadence as scores. form.mjs only writes the teams whose last-5 actually
-      # changed, so this stays cheap on Firestore even at a 2-minute cadence.
-      - name: Refresh team form
-        run: node scripts/form.mjs

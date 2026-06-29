@@ -623,20 +623,60 @@ export function bracketAccuracy(
 }
 
 // --- Recent form ----------------------------------------------------------
-// A nation's recent results across all competitions, fetched from ESPN by
-// scripts/form.mjs and stored in `teams/{name}` docs. Display-only.
+// One result in a nation's recent form. Built by buildTeamForm() from the WC
+// fixtures in state (see below). Display-only.
 export interface FormMatch {
-  date: string;        // "2026-06-13"
-  opponent: string;    // full opponent name (may be a non-WC nation)
+  date: string;        // fixture date string
+  opponent: string;    // the other WC nation in that fixture
   gf: number;          // goals for (this team)
   ga: number;          // goals against
   result: 'W' | 'D' | 'L';
-  competition: string; // e.g. "FIFA World Cup", "Men's International Friendly"
+  competition: string; // WC stage label, e.g. "Group stage", "Round of 16"
 }
 export interface TeamForm {
   name: string;        // canonical team name (matches TEAM_ISO / fixtures)
   form: FormMatch[];   // most-recent first; render reversed so newest is rightmost
   updatedAt?: string;
+}
+
+// Readable competition label for a fixture's stage (group games have no stage).
+function wcStageLabel(m: Match): string {
+  switch (m.stage) {
+    case 'R32': return 'Round of 32';
+    case 'R16': return 'Round of 16';
+    case 'QF': return 'Quarter-final';
+    case 'SF': return 'Semi-final';
+    case 'THIRD': return 'Third place';
+    case 'FINAL': return 'Final';
+    default: return 'Group stage';
+  }
+}
+
+// Recent form derived entirely from the WC fixtures we already pull — no ESPN
+// team-schedule feed. During the tournament these nations only play World Cup
+// games, so each team's last-`n` finished matches *are* their current form.
+// Returns `{ teamName -> FormMatch[] }`, most-recent first, mirroring what the
+// old `teams` collection provided so MatchCard's form strip is unchanged.
+export function buildTeamForm(matches: Match[], n = 5): Record<string, FormMatch[]> {
+  const finished = matches
+    .filter(m => m.status === 'FINISHED' && m.result_home !== undefined && m.result_away !== undefined)
+    .sort((a, b) => kickoffMs(b) - kickoffMs(a) || b.id - a.id);   // most-recent first
+  const out: Record<string, FormMatch[]> = {};
+  const add = (team: string, m: Match, home: boolean) => {
+    const list = (out[team] ??= []);
+    if (list.length >= n) return;
+    const gf = (home ? m.result_home : m.result_away) as number;
+    const ga = (home ? m.result_away : m.result_home) as number;
+    list.push({
+      date: m.date,
+      opponent: home ? m.away : m.home,
+      gf, ga,
+      result: gf > ga ? 'W' : gf < ga ? 'L' : 'D',
+      competition: wcStageLabel(m),
+    });
+  };
+  for (const m of finished) { add(m.home, m, true); add(m.away, m, false); }
+  return out;
 }
 
 // --- Group stage ----------------------------------------------------------
