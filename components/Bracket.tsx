@@ -54,21 +54,22 @@ const CX = VIEW / 2;
 const RING = [0, 128, 212, 292, 368, 444];
 const RADIAL_STROKE = 'rgb(var(--c-paper) / 0.22)';   // theme-aware: visible on light + dark
 
-// Flag diameter in px by match depth — slightly bigger toward the trophy,
-// smallest on the crowded outer ring. The champion is only a touch larger than
-// the finalists (not huge). Explicit px keeps every chip a fixed square circle
-// regardless of how Tailwind resolves dynamic size classes.
-const NODE_PX: Record<number, number> = { 0: 46, 1: 42, 2: 36, 3: 32, 4: 32 };
-const LEAF_PX = 30;
+// Flag diameter per match depth, in container-query width units (cqw = 1% of
+// the bracket's width) so every chip scales *with* the circle — the whole thing
+// shrinks to fit a phone instead of overlapping. Values are tuned at the 560px
+// max width (e.g. 5.4cqw ≈ 30px there); the champion is only a touch larger than
+// the finalists. The outer ring is smallest since 32 flags crowd it.
+const NODE_SIZE: Record<number, string> = { 0: '8.2cqw', 1: '7.5cqw', 2: '6.4cqw', 3: '5.7cqw', 4: '5.7cqw' };
+const LEAF_SIZE = '5.4cqw';
 
 const pct = (v: number) => `${(v / VIEW) * 100}%`;
 
 // A circular flag chip (the meme uses round flags). The inner flag is scaled up
 // a touch so the country fills the circle (zoomed in past the thin border /
-// letterboxing). Empty slot -> bare disc.
-const CircleFlag = ({ team, px, className }: { team?: string; px: number; className?: string }) => (
+// letterboxing). `size` is any CSS length. Empty slot -> bare disc.
+const CircleFlag = ({ team, size, className }: { team?: string; size: string; className?: string }) => (
   <span
-    style={{ width: px, height: px }}
+    style={{ width: size, height: size }}
     className={clsx('block shrink-0 rounded-full overflow-hidden bg-pitch-800/80 transition-all', className)}
   >
     {team ? <Flag team={team} className="block h-full w-full scale-[1.25] border-0" /> : null}
@@ -147,11 +148,10 @@ interface RadialBracketProps {
 // The pure circular bracket — geometry + flags only. Callers decide what each
 // slot shows (live results vs. a prediction) and whether it's interactive.
 export const RadialBracket = ({ leaf, node, onSelect, selectedId }: RadialBracketProps) => (
-  // Scroll horizontally on narrow screens: the 32 outer-ring flags are fixed-px,
-  // so the circle needs a minimum diameter or they overlap. Below ~500px the
-  // wrapper pans instead of cramming everything on top of each other.
-  <div className="overflow-x-auto no-scrollbar">
-   <div className="relative mx-auto aspect-square w-full min-w-[500px] max-w-[560px]">
+  // A query container so the cqw-sized flags scale with the circle: it always
+  // fits the screen width (no horizontal panning) and shrinks proportionally on
+  // a phone, so the flags never overlap.
+  <div className="relative mx-auto aspect-square w-full max-w-[560px] [container-type:inline-size]">
     <svg viewBox={`0 0 ${VIEW} ${VIEW}`} className="absolute inset-0 h-full w-full" aria-hidden>
       {RADIAL.connectors.map((d, i) => (
         <path key={i} d={d} fill="none" stroke={RADIAL_STROKE} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
@@ -162,7 +162,7 @@ export const RadialBracket = ({ leaf, node, onSelect, selectedId }: RadialBracke
     {RADIAL.leaves.map((lf, i) => {
       const { team, tone } = leaf(lf.matchId, lf.side);
       const sel = selectedId === lf.matchId;
-      const chip = <CircleFlag team={team} px={LEAF_PX} className={clsx(toneRing(tone), sel && 'ring-2 ring-gold/70')} />;
+      const chip = <CircleFlag team={team} size={LEAF_SIZE} className={clsx(toneRing(tone), sel && 'ring-2 ring-gold/70')} />;
       const style = { left: pct(lf.x), top: pct(lf.y) };
       const cls = 'absolute z-10 -translate-x-1/2 -translate-y-1/2';
       return onSelect
@@ -177,14 +177,14 @@ export const RadialBracket = ({ leaf, node, onSelect, selectedId }: RadialBracke
       const { team, tone } = node(id);
       const isFinal = id === 104;
       const sel = selectedId === id;
-      const px = NODE_PX[np.depth];
+      const size = NODE_SIZE[np.depth];
       let chip: React.ReactNode;
       if (team) {
-        chip = <CircleFlag team={team} px={px} className={clsx(toneRing(tone), sel && 'ring-4 ring-gold')} />;
+        chip = <CircleFlag team={team} size={size} className={clsx(toneRing(tone), sel && 'ring-4 ring-gold')} />;
       } else if (isFinal) {
-        chip = <span style={{ width: px, height: px, fontSize: px * 0.6 }} className={clsx('flex shrink-0 items-center justify-center rounded-full leading-none', tone === 'live' && 'animate-pulse', sel && 'ring-2 ring-gold')}>🏆</span>;
+        chip = <span style={{ width: size, height: size, fontSize: `calc(${size} * 0.6)` }} className={clsx('flex shrink-0 items-center justify-center rounded-full leading-none', tone === 'live' && 'animate-pulse', sel && 'ring-2 ring-gold')}>🏆</span>;
       } else {
-        chip = <span style={{ width: px, height: px }} className={clsx('block shrink-0 rounded-full border', tone === 'live' ? 'border-signal bg-signal/20 animate-pulse' : 'border-paper/25 bg-pitch-800', sel && 'ring-2 ring-gold')} />;
+        chip = <span style={{ width: size, height: size }} className={clsx('block shrink-0 rounded-full border', tone === 'live' ? 'border-signal bg-signal/20 animate-pulse' : 'border-paper/25 bg-pitch-800', sel && 'ring-2 ring-gold')} />;
       }
       const style = { left: pct(np.x), top: pct(np.y) };
       const cls = 'absolute z-20 -translate-x-1/2 -translate-y-1/2';
@@ -192,7 +192,6 @@ export const RadialBracket = ({ leaf, node, onSelect, selectedId }: RadialBracke
         ? <button key={id} type="button" onClick={() => onSelect(id)} style={style} className={clsx(cls, 'touch-manipulation')} aria-label={team ?? (isFinal ? 'Final' : 'Match')}>{chip}</button>
         : <span key={id} style={style} className={cls}>{chip}</span>;
     })}
-   </div>
   </div>
 );
 
@@ -321,9 +320,9 @@ export const Bracket = ({ matches, players, bets, currentUser }: BracketProps) =
               onClick={() => setOpenId(sel ? null : THIRD_PLACE_ID)}
               className={clsx('mx-auto flex items-center justify-center gap-3 rounded border px-4 py-2 touch-manipulation', sel ? 'border-gold/50' : 'border-chalk hover:border-gold/30')}
             >
-              <CircleFlag team={third.home} px={34} className={clsx(out === 'HOME' && 'ring-2 ring-gold', out === 'AWAY' && 'opacity-40')} />
+              <CircleFlag team={third.home} size="34px" className={clsx(out === 'HOME' && 'ring-2 ring-gold', out === 'AWAY' && 'opacity-40')} />
               <span className="font-mono text-[10px] text-paper/30">vs</span>
-              <CircleFlag team={third.away} px={34} className={clsx(out === 'AWAY' && 'ring-2 ring-gold', out === 'HOME' && 'opacity-40')} />
+              <CircleFlag team={third.away} size="34px" className={clsx(out === 'AWAY' && 'ring-2 ring-gold', out === 'HOME' && 'opacity-40')} />
             </button>
           </div>
         );
