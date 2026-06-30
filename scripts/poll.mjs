@@ -17,8 +17,13 @@
 // 404 without notice. The script logs any team it can't map so aliases can be
 // patched mid-tournament; it never throws on a single bad match.
 
-import { collection, getDocs, doc, updateDoc, deleteField } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, deleteField, query, where } from 'firebase/firestore';
+import { writeFileSync } from 'node:fs';
 import { connectAsArbiter } from './connect.mjs';
+
+// Hand-off file the notify step reads (same CI job/workspace) so it doesn't have
+// to re-scan the matches collection. Overridable for local runs.
+const NOTIFY_HANDOFF = process.env.NOTIFY_HANDOFF || 'notify-matches.json';
 
 // No arg -> a rolling window from today to +5 days (the cron's normal mode).
 // The look-ahead matters for the knockout bracket-fill: ESPN lists a fixture's
@@ -95,12 +100,21 @@ async function main() {
   const { db, cleanup } = await connectAsArbiter();
 
   // Index our fixtures by the unordered normalized team pair; keep the knockout
-  // slots aside for the bracket-fill pass below.
-  const snap = await getDocs(collection(db, 'matches'));
+  // slots aside for the bracket-fill pass below. The rolling cron skips FINISHED
+  // matches — it never rewrites them anyway, and the notify step reuses this set
+  // (see the hand-off file at the end) — which shrinks the read every cycle as
+  // the tournament progresses. An explicit backfill (date arg) reads the full
+  // set so it can still re-finalize/correct an already-finished match.
+  const scopedToLive = !dateArg;
+  const snap = await getDocs(
+    scopedToLive ? query(collection(db, 'matches'), where('status', '!=', 'FINISHED')) : collection(db, 'matches'),
+  );
   const byPair = new Map();
   const koSlots = [];
+  const liveMatches = [];
   snap.forEach((d) => {
     const m = d.data();
+    liveMatches.push(m);
     byPair.set(pairKey(m.home, m.away), m);
     if (isKnockout(m)) koSlots.push(m);
   });
@@ -237,6 +251,17 @@ async function main() {
       payload.shootout = shootout ?? deleteField();
     }
     await updateDoc(doc(db, 'matches', String(match.id)), payload);
+    // Mirror the write into our in-memory copy (same object ref lives in
+    // liveMatches) so the notify hand-off file below reflects the fresh state.
+    match.status = payload.status;
+    match.result_home = result_home;
+    match.result_away = result_away;
+    match.events = events;
+    if (isFinal) delete match.minute; else match.minute = minute;
+    if (isKnockout(match) && isFinal) {
+      if (advance != null) match.advance = advance; else delete match.advance;
+      if (shootout != null) match.shootout = shootout; else delete match.shootout;
+    }
     updated++;
     if (isFinal) finalized++; else live++;
     console.log(`#${match.id} ${match.home} ${result_home}-${result_away} ${match.away} [${isFinal ? 'FINAL' : minute}]${shootout ? ` (pens ${shootout.home}-${shootout.away})` : ''}${advance ? ` adv:${advance}` : ''} (${events.length} ev)`);
@@ -246,6 +271,17 @@ async function main() {
     console.warn(`Unmatched (add to ALIASES): ${unmatched.join(', ')}`);
   }
   console.log(`Done. ${updated} updated (${live} live, ${finalized} finalized) of ${games.length} feed games.`);
+
+  // Hand the post-write fixtures to the notify step so it skips its own scan.
+  // `full` tells notify whether FINISHED games are included (only on a backfill);
+  // on the rolling cron it re-reads the full set itself when it actually needs it.
+  try {
+    liveMatches.sort((a, b) => a.id - b.id);
+    writeFileSync(NOTIFY_HANDOFF, JSON.stringify({ full: !scopedToLive, matches: liveMatches }));
+  } catch (e) {
+    console.warn(`Could not write notify hand-off file: ${e.message}`);
+  }
+
   await cleanup();
   process.exit(0);
 }

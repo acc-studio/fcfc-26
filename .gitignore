@@ -44,3 +44,4 @@ next-env.d.ts
 
 # Local Firestore backups (contain plaintext PINs/bets — never commit)
 backups/
+notify-matches.json

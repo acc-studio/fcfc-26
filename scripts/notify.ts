@@ -10,6 +10,7 @@
 // Run locally:  node --env-file=.env.local --import tsx scripts/notify.ts
 // Env: NEXT_PUBLIC_FIREBASE_* + ARBITER_CODE (as the poller), plus a VAPID keypair:
 //   NEXT_PUBLIC_VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT (mailto:you@…).
+import { existsSync, readFileSync } from 'node:fs';
 import { collection, getDocs, doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import webpush from 'web-push';
 import { connectAsArbiter } from './connect.mjs';
@@ -105,22 +106,44 @@ async function main() {
 
   const { db, cleanup } = await connectAsArbiter();
   try {
-    // --- load everything --------------------------------------------------
-    const [matchSnap, playerSnap, betSnap, subSnap, stateSnap] = await Promise.all([
-      getDocs(collection(db, 'matches')),
-      getDocs(collection(db, 'players')),
-      getDocs(collection(db, 'bets')),
+    // --- always-cheap reads: push subscriptions + prior state -------------
+    // Matches come from the poll step's hand-off file (it just read & wrote them
+    // in the same CI job), so we skip a second scan of `matches`. bets/players
+    // are loaded lazily below — the heavy scan (~600 docs) only needed for ranks,
+    // titles and closing reminders. Result/goal/knockout broadcasts need none.
+    const [subSnap, stateSnap] = await Promise.all([
       getDocs(collection(db, 'pushSubs')),
       getDoc(doc(db, 'notifyState', 'state')),
     ]);
 
-    const matches = matchSnap.docs.map(d => d.data() as Match).sort((a, b) => a.id - b.id);
-    const players = playerSnap.docs.map(d => d.data() as Player);
-    const bets: Record<string, Bet> = {};
-    for (const d of betSnap.docs) {
-      const b = d.data() as Bet;
-      if (b && b.pick) bets[d.id] = b;   // doc id === `${user_id}_${match_id}`
+    // `hasAllMatches` is true only when the hand-off already includes FINISHED
+    // games (an explicit backfill); on the rolling cron it's non-finished only,
+    // so rank scoring re-reads the full set on the rare needBets cycle. A
+    // missing/corrupt file → fall back to a direct full scan (poll failed, or
+    // notify run standalone) — identical to the old behavior.
+    const HANDOFF = process.env.NOTIFY_HANDOFF || 'notify-matches.json';
+    let matches: Match[] | undefined;
+    let hasAllMatches = false;
+    if (existsSync(HANDOFF)) {
+      try {
+        const parsed = JSON.parse(readFileSync(HANDOFF, 'utf8')) as { full?: boolean; matches?: Match[] };
+        if (Array.isArray(parsed.matches)) { matches = parsed.matches; hasAllMatches = !!parsed.full; }
+      } catch { /* fall through to a direct read */ }
     }
+    if (!matches) {
+      const snap = await getDocs(collection(db, 'matches'));
+      matches = snap.docs.map(d => d.data() as Match);
+      hasAllMatches = true;
+    }
+    matches.sort((a, b) => a.id - b.id);
+
+    // Full fixture set (incl. FINISHED) — needed only to score ranks/titles.
+    const loadAllMatches = async (): Promise<Match[]> => {
+      if (hasAllMatches) return matches!;
+      const snap = await getDocs(collection(db, 'matches'));
+      return snap.docs.map(d => d.data() as Match).sort((a, b) => a.id - b.id);
+    };
+
     const subs = subSnap.docs.map(d => {
       const data = d.data() as { user_id: string; subscription: webpush.PushSubscription; prefs?: Record<string, boolean> };
       return { id: d.id, user_id: data.user_id, subscription: data.subscription, prefs: data.prefs ?? {} };
@@ -135,9 +158,23 @@ async function main() {
     }
 
     const now = Date.now();
-    const playerIds = new Set(players.map(p => p.id));
 
-    // --- compute current snapshot ----------------------------------------
+    // The expensive scan, loaded only when needed (see needBets below).
+    const loadBetsPlayers = async () => {
+      const [playerSnap, betSnap] = await Promise.all([
+        getDocs(collection(db, 'players')),
+        getDocs(collection(db, 'bets')),
+      ]);
+      const players = playerSnap.docs.map(d => d.data() as Player);
+      const bets: Record<string, Bet> = {};
+      for (const d of betSnap.docs) {
+        const b = d.data() as Bet;
+        if (b && b.pick) bets[d.id] = b;   // doc id === `${user_id}_${match_id}`
+      }
+      return { players, bets };
+    };
+
+    // --- compute the match-derived snapshot (no bets needed) -------------
     const next = emptyState();
     for (const m of matches) {
       const id = String(m.id);
@@ -146,23 +183,25 @@ async function main() {
       if (isKnockout(m) && teamsResolved(m)) next.koResolved[id] = true;
     }
 
-    // table ranks (points desc, name tiebreak — mirrors Leaderboard)
-    const { stats } = computePunterStats(players, bets, matches);
-    const ranked: PunterStat[] = [...stats].sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
-    ranked.forEach((s, i) => { next.rank[s.id] = i + 1; });
-
-    const titleHolders = computeTitleHolders(players, bets, matches);
-    for (const [k, v] of Object.entries(titleHolders)) if (v) next.titles[k] = v;
+    const inClosingWindow = (m: Match) => {
+      const k = kickoffMs(m);
+      return m.status === 'UPCOMING' && teamsResolved(m) && k > now && k <= now + CLOSING_MS;
+    };
 
     // --- seed guard: first ever run sends nothing ------------------------
     if (!stateSnap.exists()) {
-      // carry forward closing reminders as already-handled so the first real
-      // run doesn't blast every imminent match.
+      const { players, bets } = await loadBetsPlayers();
+      const allMatches = await loadAllMatches();
+      // baseline ranks/titles so the first real run diffs against real values…
+      const { stats } = computePunterStats(players, bets, allMatches);
+      [...stats].sort((a, b) => b.points - a.points || a.name.localeCompare(b.name))
+        .forEach((s, i) => { next.rank[s.id] = i + 1; });
+      const holders = computeTitleHolders(players, bets, allMatches);
+      for (const [k, v] of Object.entries(holders)) if (v) next.titles[k] = v;
+      // …and carry forward closing reminders as already-handled so the first
+      // real run doesn't blast every imminent match.
       for (const m of matches) {
-        const k = kickoffMs(m);
-        if (m.status === 'UPCOMING' && k > now && k <= now + CLOSING_MS) {
-          for (const p of players) next.closingSent[`${p.id}_${m.id}`] = true;
-        }
+        if (inClosingWindow(m)) for (const p of players) next.closingSent[`${p.id}_${m.id}`] = true;
       }
       await setDoc(doc(db, 'notifyState', 'state'), next);
       console.log('notify: seeded baseline state (no notifications sent).');
@@ -171,10 +210,18 @@ async function main() {
     const prev = { ...emptyState(), ...(stateSnap.data() as Partial<NotifyState>) };
     next.closingSent = { ...prev.closingSent };
 
+    // Ranks, titles and closing reminders are the only things that need bets,
+    // and they can only move when a match just finalized or one is closing
+    // soon. Skip the ~600-doc scan on every other cycle (live play, idle, etc.).
+    const anyFinalized = matches.some(m => m.status === 'FINISHED' && prev.matchStatus[String(m.id)] !== 'FINISHED');
+    const anyClosing = matches.some(inClosingWindow);
+    const needBets = anyFinalized || anyClosing;
+
     // --- build messages ---------------------------------------------------
     const msgs: Msg[] = [];
     const byId = new Map(matches.map(m => [m.id, m] as const));
 
+    // Match result / live-goal / knockout-unlock broadcasts — none need bets.
     for (const m of matches) {
       const id = String(m.id);
       const label = `${m.home} vs ${m.away}`;
@@ -219,10 +266,18 @@ async function main() {
           tag: `m${id}-ko`,
         });
       }
+    }
+
+    if (needBets) {
+      const { players, bets } = await loadBetsPlayers();
+      const allMatches = await loadAllMatches();
+      const playerIds = new Set(players.map(p => p.id));
 
       // Betting closing soon (per user, once each)
-      const k = kickoffMs(m);
-      if (m.status === 'UPCOMING' && teamsResolved(m) && k > now && k <= now + CLOSING_MS) {
+      for (const m of matches) {
+        if (!inClosingWindow(m)) continue;
+        const k = kickoffMs(m);
+        const label = `${m.home} vs ${m.away}`;
         for (const p of players) {
           const key = `${p.id}_${m.id}`;
           if (next.closingSent[key]) continue;
@@ -236,39 +291,51 @@ async function main() {
             type: 'closing',
             title: '⏰ Bets close soon',
             body: `${label} kicks off in ~${hrs}h — you haven't picked.`,
-            tag: `m${id}-close`,
+            tag: `m${m.id}-close`,
           });
         }
       }
-    }
 
-    // Table moves (per user) — skip players new to the table (no prior rank).
-    for (const s of ranked) {
-      const newRank = next.rank[s.id];
-      const oldRank = prev.rank[s.id];
-      if (oldRank === undefined || oldRank === newRank) continue;
-      const up = newRank < oldRank;
-      msgs.push({
-        target: { kind: 'user', userId: s.id },
-        type: 'table',
-        title: up ? '📈 Climbing' : '📉 Slipping',
-        body: up ? `You're now ${ordinal(newRank)} in the table` : `You slipped to ${ordinal(newRank)} in the table`,
-        tag: 'rank',
-      });
-    }
+      // table ranks (points desc, name tiebreak — mirrors Leaderboard)
+      const { stats } = computePunterStats(players, bets, allMatches);
+      const ranked: PunterStat[] = [...stats].sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+      ranked.forEach((s, i) => { next.rank[s.id] = i + 1; });
 
-    // Title changes (per user) — notify the new holder (roast titles included).
-    for (const [key, holder] of Object.entries(titleHolders)) {
-      if (!holder || prev.titles[key] === holder) continue;
-      if (!playerIds.has(holder)) continue;
-      const { emoji, label } = titleCopy(key);
-      msgs.push({
-        target: { kind: 'user', userId: holder },
-        type: 'titles',
-        title: `${emoji} New title`,
-        body: `You're now ${label}`,
-        tag: `title-${key}`,
-      });
+      // Table moves (per user) — skip players new to the table (no prior rank).
+      for (const s of ranked) {
+        const newRank = next.rank[s.id];
+        const oldRank = prev.rank[s.id];
+        if (oldRank === undefined || oldRank === newRank) continue;
+        const up = newRank < oldRank;
+        msgs.push({
+          target: { kind: 'user', userId: s.id },
+          type: 'table',
+          title: up ? '📈 Climbing' : '📉 Slipping',
+          body: up ? `You're now ${ordinal(newRank)} in the table` : `You slipped to ${ordinal(newRank)} in the table`,
+          tag: 'rank',
+        });
+      }
+
+      // Title changes (per user) — notify the new holder (roast titles included).
+      const titleHolders = computeTitleHolders(players, bets, allMatches);
+      for (const [k, v] of Object.entries(titleHolders)) if (v) next.titles[k] = v;
+      for (const [key, holder] of Object.entries(titleHolders)) {
+        if (!holder || prev.titles[key] === holder) continue;
+        if (!playerIds.has(holder)) continue;
+        const { emoji, label } = titleCopy(key);
+        msgs.push({
+          target: { kind: 'user', userId: holder },
+          type: 'titles',
+          title: `${emoji} New title`,
+          body: `You're now ${label}`,
+          tag: `title-${key}`,
+        });
+      }
+    } else {
+      // No bets read this cycle — carry the bet-derived state forward so the
+      // next needBets run still has a baseline to diff against.
+      next.rank = { ...prev.rank };
+      next.titles = { ...prev.titles };
     }
 
     // --- send -------------------------------------------------------------
