@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import { Player, ProSession } from '@/lib/data';
 import { Emoji } from './Emoji';
+import { DatePicker } from './Calendar';
 
 // The "Pro" tab: organise a Pro Clubs gaming session. A logged-in player picks
 // who to invite + a date/time; invitees accept or reject (a rejection needs a
@@ -138,13 +139,7 @@ export const Pro = ({ sessions, players, currentUser, onCreate, onRespond }: Pro
               </div>
 
               <div className="flex flex-wrap items-end gap-3">
-                <input
-                  type="date"
-                  value={date}
-                  min={trToday()}
-                  onChange={(e) => { setError(''); setDate(e.target.value); }}
-                  className="bg-pitch-900 border border-chalk focus:border-gold rounded px-3 py-2 font-mono text-sm text-paper focus:outline-none"
-                />
+                <DatePicker value={date} min={trToday()} onChange={(v) => { setError(''); setDate(v); }} />
                 <input
                   type="time"
                   value={time}
