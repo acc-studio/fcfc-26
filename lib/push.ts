@@ -18,7 +18,7 @@ export type PushStatus =
 // Per-type notification preferences. Stored per-device: localStorage drives the
 // UI (pushSubs isn't client-readable), and the same prefs are written into this
 // device's pushSubs doc so the sender (scripts/notify.ts) can filter by type.
-export type NotifyType = 'result' | 'goals' | 'knockout' | 'closing' | 'table' | 'titles';
+export type NotifyType = 'result' | 'goals' | 'knockout' | 'closing' | 'table' | 'titles' | 'pro';
 export type NotifyPrefs = Record<NotifyType, boolean>;
 
 export const NOTIFY_TYPES: { key: NotifyType; label: string; emoji: string }[] = [
@@ -28,6 +28,7 @@ export const NOTIFY_TYPES: { key: NotifyType; label: string; emoji: string }[] =
   { key: 'closing', label: 'Bet reminders', emoji: '⏰' },
   { key: 'table', label: 'Table moves', emoji: '📈' },
   { key: 'titles', label: 'New titles', emoji: '🏅' },
+  { key: 'pro', label: 'Pro sessions', emoji: '🎮' },
 ];
 
 const PREFS_KEY = 'pitch_notify_prefs';

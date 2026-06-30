@@ -60,6 +60,28 @@ export interface Player {
 // also lets users type any emoji of their own.
 export const AVATARS = ['😼', '🤡', '🥴', '😏', '🤠', '🫠', '🐐', '🦂', '👹', '🤖', '👽', '🦅'];
 
+// A "Pro" session — a Pro Clubs gaming meetup a player organizes. The host
+// invites others, who accept or reject (a rejection carries a "Sebep" reason
+// justifying absence). Lives in the `proSessions` collection (doc id = uuid).
+// `startMs` is an absolute epoch (ms) so the T-60min reminder is timezone-proof.
+export interface ProResponse {
+  status: 'accepted' | 'rejected';
+  sebep?: string;     // rejection reason (required when rejecting)
+  at: number;         // epoch ms the response was given
+}
+
+export interface ProSession {
+  id: string;
+  host: string;                            // player id of the organizer
+  invitees: string[];                      // invited player ids (excludes host)
+  startMs: number;                         // absolute session start (epoch ms)
+  createdAt: number;
+  responses: Record<string, ProResponse>;  // keyed by invitee player id
+}
+
+// Reminder lead time for a Pro session push (T-60min), mirrored in notify.ts.
+export const PRO_REMINDER_MS = 60 * 60 * 1000;
+
 // The arbiter unlock code is no longer in the client. It lives in the
 // Firestore `config/arbiter` doc (never client-readable); ArbiterModal proves
 // knowledge of it by writing an `arbiters/{uid}` doc that the rules validate

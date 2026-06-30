@@ -15,8 +15,8 @@ import { collection, getDocs, doc, getDoc, setDoc, deleteDoc } from 'firebase/fi
 import webpush from 'web-push';
 import { connectAsArbiter } from './connect.mjs';
 import {
-  type Match, type Bet, type Player, type PunterStat,
-  kickoffMs, isKnockout, teamsResolved,
+  type Match, type Bet, type Player, type PunterStat, type ProSession,
+  kickoffMs, isKnockout, teamsResolved, PRO_REMINDER_MS,
   computePunterStats, computeCrowdStats, computeKnockoutStats, computeValueStats, computeAffinityStats,
   AFFINITY_META, CONFEDERATIONS,
 } from '../lib/data';
@@ -36,14 +36,15 @@ interface NotifyState {
   closingDone: Record<string, boolean>;   // matchId -> closing pass run (gates bets read)
   rank: Record<string, number>;           // uid -> table position (1-based)
   titles: Record<string, string>;         // titleKey -> holder uid
+  proReminded: Record<string, boolean>;   // pro session id -> T-60min reminder sent
 }
 
 type Target = { kind: 'all' } | { kind: 'user'; userId: string };
-type NotifyType = 'result' | 'goals' | 'knockout' | 'closing' | 'table' | 'titles';
+type NotifyType = 'result' | 'goals' | 'knockout' | 'closing' | 'table' | 'titles' | 'pro';
 interface Msg { target: Target; type: NotifyType; title: string; body: string; tag: string; }
 
 const emptyState = (): NotifyState =>
-  ({ matchStatus: {}, eventCount: {}, koResolved: {}, closingSent: {}, closingDone: {}, rank: {}, titles: {} });
+  ({ matchStatus: {}, eventCount: {}, koResolved: {}, closingSent: {}, closingDone: {}, rank: {}, titles: {}, proReminded: {} });
 
 // --- title copy (non-affinity); affinity copy comes from AFFINITY_META --------
 // label is phrased to follow "You're now …".
@@ -112,10 +113,12 @@ async function main() {
     // in the same CI job), so we skip a second scan of `matches`. bets/players
     // are loaded lazily below — the heavy scan (~600 docs) only needed for ranks,
     // titles and closing reminders. Result/goal/knockout broadcasts need none.
-    const [subSnap, stateSnap] = await Promise.all([
+    const [subSnap, stateSnap, proSnap] = await Promise.all([
       getDocs(collection(db, 'pushSubs')),
       getDoc(doc(db, 'notifyState', 'state')),
+      getDocs(collection(db, 'proSessions')),   // small; powers the T-60min reminder
     ]);
+    const proSessions = proSnap.docs.map(d => d.data() as ProSession);
 
     // `hasAllMatches` is true only when the hand-off already includes FINISHED
     // games (an explicit backfill); on the rolling cron it's non-finished only,
@@ -346,6 +349,42 @@ async function main() {
       // next needBets run still has a baseline to diff against.
       next.rank = { ...prev.rank };
       next.titles = { ...prev.titles };
+    }
+
+    // --- Pro session reminders (T-60min) ---------------------------------
+    // Independent of matches/bets. Once, ~1h before a session starts, remind the
+    // host plus invitees who accepted or haven't replied (NOT the rejecters).
+    // The immediate invite push is sent on creation by /api/pro-invite instead.
+    next.proReminded = { ...prev.proReminded };
+    const dueSessions = proSessions.filter(ps =>
+      !prev.proReminded[ps.id] && ps.startMs - now > 0 && ps.startMs - now <= PRO_REMINDER_MS);
+    if (dueSessions.length) {
+      // names for the body — cheap (~6 docs) and only when a reminder fires.
+      const pSnap = await getDocs(collection(db, 'players'));
+      const nameById = new Map(pSnap.docs.map(d => { const p = d.data() as Player; return [p.id, p.name]; }));
+      for (const ps of dueSessions) {
+        next.proReminded[ps.id] = true;
+        const hostName = nameById.get(ps.host) ?? '?';
+        const recipients = new Set<string>([ps.host]);
+        for (const id of ps.invitees ?? []) {
+          if (ps.responses?.[id]?.status !== 'rejected') recipients.add(id);
+        }
+        for (const uid of recipients) {
+          msgs.push({
+            target: { kind: 'user', userId: uid },
+            type: 'pro',
+            title: '🎮 Pro session · 1h',
+            body: `${hostName} · starts in ~1h`,
+            tag: `pro-${ps.id}-rem`,
+          });
+        }
+      }
+    }
+    // prune reminder flags for sessions that are gone or already started
+    const psById = new Map(proSessions.map(ps => [ps.id, ps]));
+    for (const id of Object.keys(next.proReminded)) {
+      const ps = psById.get(id);
+      if (!ps || ps.startMs < now) delete next.proReminded[id];
     }
 
     // --- send -------------------------------------------------------------

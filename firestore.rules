@@ -98,6 +98,30 @@ service cloud.firestore {
       allow read, write: if isArbiter();
     }
 
+    // Pro sessions: a player organizes a Pro Clubs meetup, invites others, who
+    // accept/reject (rejection carries a "Sebep" reason). World-readable (the Pro
+    // tab shows everyone's sessions + responses). Create requires the full shape;
+    // updates may only change `responses` (invitees respond) — host/invitees/
+    // start/createdAt are frozen, so a responder can't reshape the session.
+    // Deletes are arbiter-only (cleanup).
+    match /proSessions/{sessionId} {
+      allow read: if true;
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasAll(['id', 'host', 'invitees', 'startMs', 'createdAt', 'responses'])
+        && request.resource.data.host is string
+        && request.resource.data.invitees is list
+        && request.resource.data.startMs is number
+        && request.resource.data.createdAt is number
+        && request.resource.data.responses is map;
+      allow update: if request.auth != null
+        && request.resource.data.host == resource.data.host
+        && request.resource.data.invitees == resource.data.invitees
+        && request.resource.data.startMs == resource.data.startMs
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.responses is map;
+      allow delete: if isArbiter();
+    }
+
     // Build-Your-Bracket predictions: world-readable (everyone can view each
     // other's locked bracket). A bracket is written once, locked, and is then
     // permanent — `update` is allowed only while the stored doc is still

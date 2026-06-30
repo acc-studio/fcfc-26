@@ -2,13 +2,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
-import { Match, Player, Pick, BracketPrediction, kickoffMs, BET_WINDOW_MS, isKnockout, teamsResolved, buildTeamForm } from '@/lib/data';
+import { Match, Player, Pick, BracketPrediction, ProSession, ProResponse, kickoffMs, BET_WINDOW_MS, isKnockout, teamsResolved, buildTeamForm } from '@/lib/data';
 import { MatchCard } from '@/components/MatchCard';
 import { Emoji } from '@/components/Emoji';
 import { Leaderboard } from '@/components/Leaderboard';
 import { Groups } from '@/components/Groups';
 import { Bracket } from '@/components/Bracket';
 import { BracketGame } from '@/components/BracketGame';
+import { Pro } from '@/components/Pro';
 import { auth, db } from '@/lib/firebase';
 import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { AuthModal } from '@/components/AuthModal';
@@ -18,7 +19,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { NotifyToggle } from '@/components/NotifyToggle';
 
 export default function WorldCupApp() {
-  const [activeTab, setActiveTab] = useState<'next' | 'upcoming' | 'past' | 'groups' | 'bracket' | 'table'>('next');
+  const [activeTab, setActiveTab] = useState<'next' | 'upcoming' | 'past' | 'groups' | 'bracket' | 'table' | 'pro'>('next');
 
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [authModal, setAuthModal] = useState<{ isOpen: boolean; target: Player | null }>({
@@ -34,6 +35,8 @@ export default function WorldCupApp() {
   const [bets, setBets] = useState<Record<string, any>>({});
   // Locked "Build Your Bracket" predictions, keyed by player id.
   const [brackets, setBrackets] = useState<Record<string, BracketPrediction>>({});
+  // Pro Clubs sessions (organize + RSVP).
+  const [proSessions, setProSessions] = useState<ProSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   // Refreshed every minute so the 48h betting window closes live.
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -85,6 +88,11 @@ export default function WorldCupApp() {
       setBrackets(map);
     });
 
+    // Live Pro sessions: organize + RSVP, streamed to all devices.
+    const unsubPro = onSnapshot(collection(db, 'proSessions'), (snap) => {
+      setProSessions(snap.docs.map(d => d.data() as ProSession));
+    });
+
     const tick = setInterval(() => setNowMs(Date.now()), 60_000);
 
     return () => {
@@ -92,6 +100,7 @@ export default function WorldCupApp() {
       unsubBets();
       unsubPlayers();
       unsubBrackets();
+      unsubPro();
       clearInterval(tick);
     };
   }, []);
@@ -234,6 +243,38 @@ export default function WorldCupApp() {
     };
     setBrackets(prev => ({ ...prev, [currentUser]: payload }));
     await setDoc(doc(db, 'brackets', currentUser), payload);
+  };
+
+  // Create a Pro session and fire the instant invite push. crypto.randomUUID is
+  // secure-context only (mirrors handleRegister's fallback for plain-http LAN).
+  const handleCreatePro = async (invitees: string[], startMs: number) => {
+    if (!currentUser) return;
+    const id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `ps_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+    const session: ProSession = { id, host: currentUser, invitees, startMs, createdAt: Date.now(), responses: {} };
+    setProSessions(prev => [...prev, session]);
+    await setDoc(doc(db, 'proSessions', id), session);
+    // Best-effort: the immediate invite push. The doc + the T-60min reminder
+    // stand regardless of whether this call succeeds.
+    try {
+      await fetch('/api/pro-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: id }),
+      });
+    } catch { /* push is best-effort */ }
+  };
+
+  // An invitee accepts or rejects (rejection carries a Sebep). Dot-path write so
+  // it only touches this user's slot in the responses map (rules freeze the rest).
+  const handleRespondPro = async (sessionId: string, status: 'accepted' | 'rejected', sebep?: string) => {
+    if (!currentUser) return;
+    const resp: ProResponse = { status, at: Date.now(), ...(sebep ? { sebep } : {}) };
+    setProSessions(prev => prev.map(s => s.id === sessionId
+      ? { ...s, responses: { ...s.responses, [currentUser]: resp } }
+      : s));
+    await updateDoc(doc(db, 'proSessions', sessionId), { [`responses.${currentUser}`]: resp });
   };
 
   const handleUserClick = (player: Player) => {
@@ -533,6 +574,24 @@ export default function WorldCupApp() {
                 />
               </motion.div>
             )}
+
+            {activeTab === 'pro' && (
+              <motion.div
+                key="pro"
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 10 }}
+                transition={{ duration: 0.3 }}
+              >
+                <Pro
+                  sessions={proSessions}
+                  players={players}
+                  currentUser={currentUser || ''}
+                  onCreate={handleCreatePro}
+                  onRespond={handleRespondPro}
+                />
+              </motion.div>
+            )}
           </AnimatePresence>
         )}
 
@@ -632,6 +691,22 @@ export default function WorldCupApp() {
           >
             Table
             {activeTab === 'table' && (
+              <motion.div layoutId="nav-indicator" className="absolute bottom-2 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-gold" />
+            )}
+          </button>
+
+          <div className="w-px bg-chalk my-4 opacity-50"></div>
+
+          {/* Pro Tab */}
+          <button
+            onClick={() => setActiveTab('pro')}
+            className={clsx(
+              "flex-1 py-6 text-center font-mono text-[10px] md:text-[11px] uppercase tracking-wide transition-colors relative whitespace-nowrap",
+              activeTab === 'pro' ? "text-gold" : "text-paper/40 hover:text-paper"
+            )}
+          >
+            Pro
+            {activeTab === 'pro' && (
               <motion.div layoutId="nav-indicator" className="absolute bottom-2 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-gold" />
             )}
           </button>
