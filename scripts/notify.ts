@@ -33,6 +33,7 @@ interface NotifyState {
   eventCount: Record<string, number>;     // id -> events.length last seen
   koResolved: Record<string, boolean>;    // knockout id -> both teams resolved
   closingSent: Record<string, boolean>;   // `${uid}_${matchId}` reminders sent
+  closingDone: Record<string, boolean>;   // matchId -> closing pass run (gates bets read)
   rank: Record<string, number>;           // uid -> table position (1-based)
   titles: Record<string, string>;         // titleKey -> holder uid
 }
@@ -42,7 +43,7 @@ type NotifyType = 'result' | 'goals' | 'knockout' | 'closing' | 'table' | 'title
 interface Msg { target: Target; type: NotifyType; title: string; body: string; tag: string; }
 
 const emptyState = (): NotifyState =>
-  ({ matchStatus: {}, eventCount: {}, koResolved: {}, closingSent: {}, rank: {}, titles: {} });
+  ({ matchStatus: {}, eventCount: {}, koResolved: {}, closingSent: {}, closingDone: {}, rank: {}, titles: {} });
 
 // --- title copy (non-affinity); affinity copy comes from AFFINITY_META --------
 // label is phrased to follow "You're now …".
@@ -209,12 +210,18 @@ async function main() {
     }
     const prev = { ...emptyState(), ...(stateSnap.data() as Partial<NotifyState>) };
     next.closingSent = { ...prev.closingSent };
+    next.closingDone = { ...prev.closingDone };
 
     // Ranks, titles and closing reminders are the only things that need bets,
     // and they can only move when a match just finalized or one is closing
     // soon. Skip the ~600-doc scan on every other cycle (live play, idle, etc.).
+    //
+    // Crucially, a match's closing reminder fires ONCE (when it enters the 4h
+    // window), so we gate on closingDone — otherwise every cycle for 4h straight
+    // would re-read bets just to re-confirm an already-sent reminder (the read
+    // spikes). Once handled, the match no longer pulls bets until kickoff.
     const anyFinalized = matches.some(m => m.status === 'FINISHED' && prev.matchStatus[String(m.id)] !== 'FINISHED');
-    const anyClosing = matches.some(inClosingWindow);
+    const anyClosing = matches.some(m => inClosingWindow(m) && !prev.closingDone[String(m.id)]);
     const needBets = anyFinalized || anyClosing;
 
     // --- build messages ---------------------------------------------------
@@ -273,9 +280,12 @@ async function main() {
       const allMatches = await loadAllMatches();
       const playerIds = new Set(players.map(p => p.id));
 
-      // Betting closing soon (per user, once each)
+      // Betting closing soon (per user, once each). Mark the match's closing
+      // pass done so it stops pulling bets every cycle for the rest of its 4h
+      // window — the per-user closingSent guard already prevents re-sends.
       for (const m of matches) {
         if (!inClosingWindow(m)) continue;
+        next.closingDone[String(m.id)] = true;
         const k = kickoffMs(m);
         const label = `${m.home} vs ${m.away}`;
         for (const p of players) {
@@ -359,11 +369,16 @@ async function main() {
       }
     }
 
-    // prune closing reminders for matches that are no longer upcoming
+    // prune closing state for matches that are no longer upcoming (kicked off,
+    // finalized, or reopened) so it can't leak or wrongly suppress a re-window.
     for (const key of Object.keys(next.closingSent)) {
       const mid = Number(key.split('_')[1]);
       const m = byId.get(mid);
       if (!m || m.status !== 'UPCOMING') delete next.closingSent[key];
+    }
+    for (const id of Object.keys(next.closingDone)) {
+      const m = byId.get(Number(id));
+      if (!m || m.status !== 'UPCOMING') delete next.closingDone[id];
     }
 
     await setDoc(doc(db, 'notifyState', 'state'), next);
