@@ -25,14 +25,21 @@ import { connectAsArbiter } from './connect.mjs';
 // to re-scan the matches collection. Overridable for local runs.
 const NOTIFY_HANDOFF = process.env.NOTIFY_HANDOFF || 'notify-matches.json';
 
-// No arg -> a rolling window from today to +5 days (the cron's normal mode).
+// No arg -> a rolling window from yesterday to +5 days (the cron's normal mode).
 // The look-ahead matters for the knockout bracket-fill: ESPN lists a fixture's
 // teams as soon as the feeding round finishes, so polling a few days ahead fills
 // our slots with the real qualifiers *before* they enter the 48h betting window
-// (the bare scoreboard only returns today, which would be too late to bet). The
-// window deliberately starts at today, never earlier, so the cron can't re-write
-// (and clobber an arbiter override on) an already-finished past match. Pass an
-// explicit date/range to backfill past games, e.g. `node scripts/poll.mjs
+// (the bare scoreboard only returns today, which would be too late to bet).
+//
+// The window starts one day *before* today (UTC) on purpose: ESPN buckets a game
+// under its US Eastern (UTC-4/-5) calendar date, but our dates and stored
+// kickoffs are UTC/Turkey-time. An early-morning-Turkey kickoff (e.g. a 4am
+// Türkiye = 1am UTC match) lands late the previous evening Eastern, so ESPN files
+// it under the prior day — a window that began at today-UTC would miss it and the
+// game would never propagate. Re-scanning yesterday is safe on the rolling cron
+// because it queries only non-FINISHED matches (see `scopedToLive`), so an
+// already-finalized past game isn't in `byPair`/`koSlots` and can't be clobbered.
+// Pass an explicit date/range to backfill past games, e.g. `node scripts/poll.mjs
 // 20260611` or `20260611-20260612` (ESPN uses YYYYMMDD); one request covers it.
 const dateArg = process.argv[2];
 const ymd = (ms) => {
@@ -40,7 +47,7 @@ const ymd = (ms) => {
   return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
 };
 const DAY = 86400000;
-const dates = dateArg || `${ymd(Date.now())}-${ymd(Date.now() + 5 * DAY)}`;
+const dates = dateArg || `${ymd(Date.now() - DAY)}-${ymd(Date.now() + 5 * DAY)}`;
 const ESPN_URL = `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${dates}`;
 
 // ESPN's display name -> our canonical team name (the names used in the seed /
