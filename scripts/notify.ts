@@ -1,18 +1,26 @@
-// Push-notification sender for FCFC '26.
+// Telegram notification sender for FCFC '26.
 //
 // Runs in CI right after the live-results poll (.github/workflows/poll-results.yml,
 // via `npx tsx scripts/notify.ts`). It recomputes the leaderboard / Analytics-Lab
 // titles with the SAME pure functions the app uses (lib/data.ts), diffs them
-// against the last run's snapshot (notifyState/state), and web-pushes the changes
-// to the devices in `pushSubs`. Authenticates as a transient arbiter (connect.mjs),
-// so it can read bets/players and persist the snapshot.
+// against the last run's snapshot (notifyState/state), and posts the changes to
+// the FCFC Telegram group via the Bot API. Authenticates as a transient arbiter
+// (connect.mjs), so it can read bets/players and persist the snapshot.
+//
+// Everything goes to the one group chat. Broadcasts (results, goals, knockout
+// unlocks) post plain; per-player messages (bet reminders, table moves, titles,
+// pro reminders) @tag the player via TELEGRAM_USER_MAP (a JSON object mapping
+// each player's FCFC name → their Telegram @username, minus the @).
+//
+// The web-push plumbing (lib/push.ts, public/sw.js, the pushSubs collection, the
+// in-app toggle) is intentionally left dormant, not deleted — flip this sender
+// back if the group route ever needs to be reverted.
 //
 // Run locally:  node --env-file=.env.local --import tsx scripts/notify.ts
-// Env: NEXT_PUBLIC_FIREBASE_* + ARBITER_CODE (as the poller), plus a VAPID keypair:
-//   NEXT_PUBLIC_VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT (mailto:you@…).
+// Env: NEXT_PUBLIC_FIREBASE_* + ARBITER_CODE (as the poller), plus the bot creds:
+//   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, and (optional) TELEGRAM_USER_MAP.
 import { existsSync, readFileSync } from 'node:fs';
-import { collection, getDocs, doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
-import webpush from 'web-push';
+import { collection, getDocs, doc, getDoc, setDoc } from 'firebase/firestore';
 import { connectAsArbiter } from './connect.mjs';
 import {
   type Match, type Bet, type Player, type PunterStat, type ProSession,
@@ -23,9 +31,45 @@ import {
 
 const CLOSING_MS = 4 * 60 * 60 * 1000; // "betting closing soon" lead time
 
-const VAPID_PUBLIC = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
-const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:fcfc@example.com';
+const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TG_CHAT = process.env.TELEGRAM_CHAT_ID;
+// { "<FCFC player name>": "<telegram username without @>" } — used to @tag the
+// player on per-person messages. Unmapped players fall back to their plain name.
+const USER_MAP: Record<string, string> = (() => {
+  try { return JSON.parse(process.env.TELEGRAM_USER_MAP || '{}'); }
+  catch { console.warn('TELEGRAM_USER_MAP is not valid JSON — ignoring.'); return {}; }
+})();
+
+// Escape the three characters Telegram's HTML parse mode cares about. Applied to
+// all dynamic copy (team names, scores) so a stray & or < can't break a message.
+const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// A @mention that notifies the player if they're in the group; plain name if we
+// don't have a username for them (still identifies who, just no ping).
+const mentionFor = (name?: string): string => {
+  if (!name) return '';
+  const u = USER_MAP[name];
+  return u ? `@${u.replace(/^@/, '')}` : esc(name);
+};
+
+// Post one message to the group. Retries once on a 429 (rate limit), honouring
+// Telegram's retry_after; any other failure is logged and swallowed.
+async function sendTelegram(text: string): Promise<boolean> {
+  const res = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ chat_id: TG_CHAT, text, parse_mode: 'HTML', disable_web_page_preview: true }),
+  });
+  if (res.ok) return true;
+  if (res.status === 429) {
+    const data = await res.json().catch(() => ({} as { parameters?: { retry_after?: number } }));
+    const retry = data?.parameters?.retry_after ?? 1;
+    await new Promise(r => setTimeout(r, (retry + 0.5) * 1000));
+    return sendTelegram(text);
+  }
+  console.warn(`telegram send failed (${res.status}): ${await res.text().catch(() => '')}`);
+  return false;
+}
 
 // Snapshot persisted between runs so we only alert on *changes*.
 interface NotifyState {
@@ -39,9 +83,10 @@ interface NotifyState {
   proReminded: Record<string, boolean>;   // pro session id -> T-60min reminder sent
 }
 
-type Target = { kind: 'all' } | { kind: 'user'; userId: string };
 type NotifyType = 'result' | 'goals' | 'knockout' | 'closing' | 'table' | 'titles' | 'pro';
-interface Msg { target: Target; type: NotifyType; title: string; body: string; tag: string; }
+// A message for the group. `mention` (when set) is prepended to @tag the player
+// a per-person message is about; broadcasts leave it undefined.
+interface Msg { type: NotifyType; title: string; body: string; tag: string; mention?: string; }
 
 const emptyState = (): NotifyState =>
   ({ matchStatus: {}, eventCount: {}, koResolved: {}, closingSent: {}, closingDone: {}, rank: {}, titles: {}, proReminded: {} });
@@ -100,21 +145,19 @@ const EVENT_VERB: Record<string, string> = {
 };
 
 async function main() {
-  if (!VAPID_PUBLIC || !VAPID_PRIVATE) {
-    console.error('Missing VAPID keys (NEXT_PUBLIC_VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY) — skipping notify.');
+  if (!TG_TOKEN || !TG_CHAT) {
+    console.error('Missing TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID — skipping notify.');
     process.exit(0);
   }
-  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
 
   const { db, cleanup } = await connectAsArbiter();
   try {
-    // --- always-cheap reads: push subscriptions + prior state -------------
+    // --- always-cheap reads: prior state + pro sessions -------------------
     // Matches come from the poll step's hand-off file (it just read & wrote them
     // in the same CI job), so we skip a second scan of `matches`. bets/players
     // are loaded lazily below — the heavy scan (~600 docs) only needed for ranks,
     // titles and closing reminders. Result/goal/knockout broadcasts need none.
-    const [subSnap, stateSnap, proSnap] = await Promise.all([
-      getDocs(collection(db, 'pushSubs')),
+    const [stateSnap, proSnap] = await Promise.all([
       getDoc(doc(db, 'notifyState', 'state')),
       getDocs(collection(db, 'proSessions')),   // small; powers the T-60min reminder
     ]);
@@ -147,19 +190,6 @@ async function main() {
       const snap = await getDocs(collection(db, 'matches'));
       return snap.docs.map(d => d.data() as Match).sort((a, b) => a.id - b.id);
     };
-
-    const subs = subSnap.docs.map(d => {
-      const data = d.data() as { user_id: string; subscription: webpush.PushSubscription; prefs?: Record<string, boolean> };
-      return { id: d.id, user_id: data.user_id, subscription: data.subscription, prefs: data.prefs ?? {} };
-    });
-    // A device gets a message of a given type unless it opted that type out.
-    const wants = (s: { prefs: Record<string, boolean> }, type: NotifyType) => s.prefs[type] !== false;
-
-    const byUser = new Map<string, typeof subs>();
-    for (const s of subs) {
-      if (!byUser.has(s.user_id)) byUser.set(s.user_id, []);
-      byUser.get(s.user_id)!.push(s);
-    }
 
     const now = Date.now();
 
@@ -240,7 +270,6 @@ async function main() {
       if (m.status === 'FINISHED' && prev.matchStatus[id] !== 'FINISHED') {
         const pens = m.shootout ? ` (pens ${m.shootout.home}-${m.shootout.away})` : '';
         msgs.push({
-          target: { kind: 'all' },
           type: 'result',
           title: "FCFC '26 · full time",
           body: `${m.home} ${m.result_home}–${m.result_away} ${m.away}${pens}`,
@@ -269,7 +298,6 @@ async function main() {
       // Knockout fixture newly resolved → bettable (broadcast)
       if (isKnockout(m) && teamsResolved(m) && !prev.koResolved[id] && m.status === 'UPCOMING') {
         msgs.push({
-          target: { kind: 'all' },
           type: 'knockout',
           title: '🗝️ Knockout fixture unlocked',
           body: `${label} — place your bets`,
@@ -297,14 +325,13 @@ async function main() {
           const bet = bets[`${p.id}_${m.id}`];
           if (bet?.pick) continue;                 // already picked
           next.closingSent[key] = true;
-          if (!byUser.has(p.id)) continue;          // no device subscribed
           const hrs = Math.max(1, Math.round((k - now) / 3600000));
           msgs.push({
-            target: { kind: 'user', userId: p.id },
             type: 'closing',
             title: '⏰ Bets close soon',
             body: `${label} kicks off in ~${hrs}h — you haven't picked.`,
             tag: `m${m.id}-close`,
+            mention: mentionFor(p.name),
           });
         }
       }
@@ -321,11 +348,11 @@ async function main() {
         if (oldRank === undefined || oldRank === newRank) continue;
         const up = newRank < oldRank;
         msgs.push({
-          target: { kind: 'user', userId: s.id },
           type: 'table',
           title: up ? '📈 Climbing' : '📉 Slipping',
-          body: up ? `You're now ${ordinal(newRank)} in the table` : `You slipped to ${ordinal(newRank)} in the table`,
+          body: up ? `is now ${ordinal(newRank)} in the table` : `slipped to ${ordinal(newRank)} in the table`,
           tag: 'rank',
+          mention: mentionFor(s.name),
         });
       }
 
@@ -336,12 +363,13 @@ async function main() {
         if (!holder || prev.titles[key] === holder) continue;
         if (!playerIds.has(holder)) continue;
         const { emoji, label } = titleCopy(key);
+        const holderName = players.find(p => p.id === holder)?.name;
         msgs.push({
-          target: { kind: 'user', userId: holder },
           type: 'titles',
           title: `${emoji} New title`,
-          body: `You're now ${label}`,
+          body: `is now ${label}`,
           tag: `title-${key}`,
+          mention: mentionFor(holderName),
         });
       }
     } else {
@@ -371,11 +399,11 @@ async function main() {
         }
         for (const uid of recipients) {
           msgs.push({
-            target: { kind: 'user', userId: uid },
             type: 'pro',
             title: '🎮 Pro session · 1h',
-            body: `${hostName} · starts in ~1h`,
+            body: `${hostName}'s session starts in ~1h`,
             tag: `pro-${ps.id}-rem`,
+            mention: mentionFor(nameById.get(uid)),
           });
         }
       }
@@ -388,24 +416,14 @@ async function main() {
     }
 
     // --- send -------------------------------------------------------------
-    let sent = 0, pruned = 0;
+    // One Telegram message per change. Title is bolded; a per-player message
+    // leads with the @mention so the group can see (and the player is pinged on)
+    // who it's about.
+    let sent = 0;
     for (const msg of msgs) {
-      const pool = msg.target.kind === 'all' ? subs : (byUser.get(msg.target.userId) ?? []);
-      const targets = pool.filter((s) => wants(s, msg.type));   // honour per-device type prefs
-      const payload = JSON.stringify({ title: msg.title, body: msg.body, url: '/', tag: msg.tag });
-      for (const s of targets) {
-        try {
-          await webpush.sendNotification(s.subscription, payload);
-          sent++;
-        } catch (err: unknown) {
-          const code = (err as { statusCode?: number }).statusCode;
-          if (code === 404 || code === 410) {
-            try { await deleteDoc(doc(db, 'pushSubs', s.id)); pruned++; } catch { /* ignore */ }
-          } else {
-            console.warn(`push failed (${code ?? 'err'}) for ${s.id}`);
-          }
-        }
-      }
+      const head = `<b>${esc(msg.title)}</b>`;
+      const body = msg.mention ? `${msg.mention} ${esc(msg.body)}` : esc(msg.body);
+      if (await sendTelegram(`${head}\n${body}`)) sent++;
     }
 
     // prune closing state for matches that are no longer upcoming (kicked off,
@@ -421,7 +439,7 @@ async function main() {
     }
 
     await setDoc(doc(db, 'notifyState', 'state'), next);
-    console.log(`notify: ${msgs.length} change(s) → ${sent} push(es) sent, ${pruned} stale sub(s) pruned.`);
+    console.log(`notify: ${msgs.length} change(s) → ${sent} telegram message(s) sent.`);
   } finally {
     await cleanup();
   }
