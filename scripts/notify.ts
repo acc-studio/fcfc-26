@@ -28,6 +28,7 @@ import {
   computePunterStats, computeCrowdStats, computeKnockoutStats, computeValueStats, computeAffinityStats,
   AFFINITY_META, CONFEDERATIONS,
 } from '../lib/data';
+import { escapeHtml, mentionFor as mentionForName, parseUserMap, sendTelegram as tgSend } from '../lib/telegram';
 
 const CLOSING_MS = 4 * 60 * 60 * 1000; // "betting closing soon" lead time
 
@@ -37,41 +38,13 @@ const TG_CHAT = process.env.TELEGRAM_CHAT_ID;
 const DRY_RUN = process.env.NOTIFY_DRY_RUN === '1';
 // { "<FCFC player name>": "<telegram username without @>" } — used to @tag the
 // player on per-person messages. Unmapped players fall back to their plain name.
-const USER_MAP: Record<string, string> = (() => {
-  try { return JSON.parse(process.env.TELEGRAM_USER_MAP || '{}'); }
-  catch { console.warn('TELEGRAM_USER_MAP is not valid JSON — ignoring.'); return {}; }
-})();
+const USER_MAP = parseUserMap(process.env.TELEGRAM_USER_MAP);
 
-// Escape the three characters Telegram's HTML parse mode cares about. Applied to
-// all dynamic copy (team names, scores) so a stray & or < can't break a message.
-const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-// A @mention that notifies the player if they're in the group; plain name if we
-// don't have a username for them (still identifies who, just no ping).
-const mentionFor = (name?: string): string => {
-  if (!name) return '';
-  const u = USER_MAP[name];
-  return u ? `@${u.replace(/^@/, '')}` : esc(name);
-};
-
-// Post one message to the group. Retries once on a 429 (rate limit), honouring
-// Telegram's retry_after; any other failure is logged and swallowed.
-async function sendTelegram(text: string): Promise<boolean> {
-  const res = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ chat_id: TG_CHAT, text, parse_mode: 'HTML', disable_web_page_preview: true }),
-  });
-  if (res.ok) return true;
-  if (res.status === 429) {
-    const data = await res.json().catch(() => ({} as { parameters?: { retry_after?: number } }));
-    const retry = data?.parameters?.retry_after ?? 1;
-    await new Promise(r => setTimeout(r, (retry + 0.5) * 1000));
-    return sendTelegram(text);
-  }
-  console.warn(`telegram send failed (${res.status}): ${await res.text().catch(() => '')}`);
-  return false;
-}
+// Thin bindings over the shared lib/telegram helpers (which the Pro-invite route
+// also uses) — the token/chat/map are fixed per run here, so callers stay terse.
+const esc = escapeHtml;
+const mentionFor = (name?: string) => mentionForName(name, USER_MAP);
+const sendTelegram = (text: string) => tgSend(TG_TOKEN!, TG_CHAT!, text);
 
 // Snapshot persisted between runs so we only alert on *changes*.
 interface NotifyState {
@@ -288,7 +261,6 @@ async function main() {
           const e = events[i];
           const team = e.team === 'HOME' ? m.home : m.away;
           msgs.push({
-            target: { kind: 'all' },
             type: 'goals',
             title: `${EVENT_VERB[e.kind] ?? '⚽'} ${m.home} ${m.result_home}–${m.result_away} ${m.away}`,
             body: `${e.minute} ${e.player} (${team})`,
