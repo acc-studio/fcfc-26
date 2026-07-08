@@ -275,6 +275,15 @@ export default function WorldCupApp() {
       ? { ...s, responses: { ...s.responses, [currentUser]: resp } }
       : s));
     await updateDoc(doc(db, 'proSessions', sessionId), { [`responses.${currentUser}`]: resp });
+    // Best-effort: announce the reply (+ any Pro Çıktı / Emdi milestone) to the
+    // group. The doc write above stands regardless of whether this succeeds.
+    try {
+      await fetch('/api/pro-response', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, userId: currentUser }),
+      });
+    } catch { /* notification is best-effort */ }
   };
 
   const handleUserClick = (player: Player) => {
