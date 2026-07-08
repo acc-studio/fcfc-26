@@ -33,6 +33,8 @@ const CLOSING_MS = 4 * 60 * 60 * 1000; // "betting closing soon" lead time
 
 const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TG_CHAT = process.env.TELEGRAM_CHAT_ID;
+// When set, compute + log messages + persist the snapshot, but send nothing.
+const DRY_RUN = process.env.NOTIFY_DRY_RUN === '1';
 // { "<FCFC player name>": "<telegram username without @>" } — used to @tag the
 // player on per-person messages. Unmapped players fall back to their plain name.
 const USER_MAP: Record<string, string> = (() => {
@@ -418,12 +420,16 @@ async function main() {
     // --- send -------------------------------------------------------------
     // One Telegram message per change. Title is bolded; a per-player message
     // leads with the @mention so the group can see (and the player is pinged on)
-    // who it's about.
+    // who it's about. NOTIFY_DRY_RUN=1 logs each message instead of posting it
+    // (and still persists the snapshot below) — used to prime/repair the baseline
+    // without spamming the group, and to eyeball formatting/tagging.
     let sent = 0;
     for (const msg of msgs) {
       const head = `<b>${esc(msg.title)}</b>`;
       const body = msg.mention ? `${msg.mention} ${esc(msg.body)}` : esc(msg.body);
-      if (await sendTelegram(`${head}\n${body}`)) sent++;
+      const text = `${head}\n${body}`;
+      if (DRY_RUN) { console.log(`[dry-run] would send:\n${text}\n`); sent++; continue; }
+      if (await sendTelegram(text)) sent++;
     }
 
     // prune closing state for matches that are no longer upcoming (kicked off,
@@ -439,7 +445,7 @@ async function main() {
     }
 
     await setDoc(doc(db, 'notifyState', 'state'), next);
-    console.log(`notify: ${msgs.length} change(s) → ${sent} telegram message(s) sent.`);
+    console.log(`notify: ${msgs.length} change(s) → ${sent} telegram message(s) ${DRY_RUN ? 'PREVIEWED (dry-run, none sent)' : 'sent'}.`);
   } finally {
     await cleanup();
   }
