@@ -550,6 +550,180 @@ export function computeAffinityStats(
   return result;
 }
 
+// --- FCFC '26 Wrapped ------------------------------------------------------
+// A season-in-review ("Spotify Wrapped") narrative, derived from everything the
+// analytics helpers above already compute plus a few personal tallies. One call
+// builds both the group story (champion, superlatives, tournament scale) and —
+// when a punter id is passed — that punter's personal story (accuracy, streaks,
+// the team/region they backed, their rarest correct call). Pro sessions are not
+// part of the Wrapped. Everything is a pure function of finished matches + the
+// committed picks, so it recomputes live like the rest of the app.
+
+// One punter's personal season in review.
+export interface WrappedPersonal {
+  id: string;
+  name: string;
+  avatar: string;
+  points: number;              // correct picks (= leaderboard points)
+  picks: number;               // committed picks on finished matches
+  accuracy: number | null;     // points / picks, as a % (null with no picks)
+  rank: number;                // 1-based finish in the points table
+  total: number;               // punters in the table
+  longestHot: number;          // longest winning run all tournament
+  longestCold: number;         // longest losing run all tournament
+  currentStreak: PunterStreak; // the run they're on right now
+  topTeam: { team: string; count: number } | null;         // most-backed nation
+  nemesis: { team: string; losses: number } | null;        // team they kept backing and losing with
+  topConfed: { confed: Confederation; title: string; emoji: string; count: number } | null;
+  value: number;               // rarity-weighted value banked
+  valueRank: number;           // 1-based finish in the value table
+  rarest: { match: Match; pick: Pick; score: number } | null; // rarest correct call
+  koHits: number;              // knockout ties called right
+  bottles: number;             // knockout ties where they backed the loser
+  timeline: number[];          // cumulative points after each finished match
+}
+
+export interface WrappedStats {
+  finishedCount: number;       // finished matches scored
+  koFinishedCount: number;     // of those, finished knockout ties
+  totalGoals: number;          // goals across every finished match
+  totalPicks: number;          // committed picks the group made on them
+  biggestWin: Match | null;    // widest winning margin
+  highestScoring: Match | null;// most goals in one match
+  standings: PunterStat[];     // points table, leader first
+  champion: PunterStat | null; // the leader
+  gambler: RiskRecord | null;  // most risky bets
+  jockey: RiskRecord | null;   // sharpest underdog-caller
+  valueKing: ValueRecord | null; // most rarity-weighted value banked
+  hero: KnockoutRecord | null; // most knockout ties right
+  bottler: KnockoutRecord | null; // most times backing the eliminated side
+  affinities: Record<Confederation, AffinityRecord | null>;
+  personal: WrappedPersonal | null; // null when logged out / unknown id
+}
+
+export function computeWrappedStats(
+  users: Player[],
+  bets: Record<string, Bet | undefined>,
+  matches: Match[],
+  meId?: string | null,
+): WrappedStats {
+  const finished = finishedInOrder(matches);
+  const { stats } = computePunterStats(users, bets, matches);
+  const standings = [...stats].sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+  const value = computeValueStats(users, bets, matches);
+  const crowd = computeCrowdStats(users, bets, matches);
+  const ko = computeKnockoutStats(users, bets, matches);
+  const affinities = computeAffinityStats(users, bets, matches);
+
+  // Tournament scale, straight off the finished scorelines.
+  let totalGoals = 0;
+  let biggestWin: Match | null = null;
+  let highestScoring: Match | null = null;
+  const margin = (m: Match) => Math.abs((m.result_home as number) - (m.result_away as number));
+  const total = (m: Match) => (m.result_home as number) + (m.result_away as number);
+  const finishedIds = new Set<number>();
+  for (const m of finished) {
+    finishedIds.add(m.id);
+    totalGoals += total(m);
+    if (!biggestWin || margin(m) > margin(biggestWin)) biggestWin = m;
+    if (!highestScoring || total(m) > total(highestScoring)) highestScoring = m;
+  }
+
+  // Every committed pick the group laid on a finished match.
+  let totalPicks = 0;
+  for (const key in bets) {
+    const b = bets[key];
+    if (b?.pick && finishedIds.has(b.match_id)) totalPicks++;
+  }
+
+  // Personal story — only when a known punter is logged in.
+  let personal: WrappedPersonal | null = null;
+  const meStat = meId ? standings.find(s => s.id === meId) : undefined;
+  if (meId && meStat) {
+    const rank = standings.findIndex(s => s.id === meId) + 1;
+    let picks = 0;
+    const teamCount: Record<string, number> = {};
+    const teamLosses: Record<string, number> = {};
+    const confedCount = { UEFA: 0, CONMEBOL: 0, CONCACAF: 0, CAF: 0, AFC: 0, OFC: 0 } as Record<Confederation, number>;
+    let rarest: { match: Match; pick: Pick; score: number } | null = null;
+
+    for (const m of finished) {
+      const pick = bets[`${meId}_${m.id}`]?.pick;
+      if (!pick) continue;
+      picks++;
+      const result = outcomeOf(m);
+      const team = backedTeam(pick, m);
+      if (team) {
+        teamCount[team] = (teamCount[team] ?? 0) + 1;
+        const c = TEAM_CONFEDERATION[team];
+        if (c) confedCount[c]++;
+        // You backed this team to win and they didn't — a heartbreak chalked up
+        // against them. The team with the most is your nemesis.
+        if (result && pick !== result) teamLosses[team] = (teamLosses[team] ?? 0) + 1;
+      }
+      // Rarest correct call: the winning outcome you backed that the fewest of
+      // the group also called (same 1 − log₂(P) rarity as the Value Table).
+      if (result && pick === result) {
+        let correct = 0, cast = 0;
+        for (const u of users) {
+          const p = bets[`${u.id}_${m.id}`]?.pick;
+          if (!p) continue;
+          cast++;
+          if (p === result) correct++;
+        }
+        if (cast > 0) {
+          const score = 1 - Math.log2(Math.max(1, correct) / cast);
+          if (!rarest || score > rarest.score) rarest = { match: m, pick, score };
+        }
+      }
+    }
+
+    const teamEntry = Object.entries(teamCount).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+    const topTeam = teamEntry ? { team: teamEntry[0], count: teamEntry[1] } : null;
+    const lossEntry = Object.entries(teamLosses).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+    const nemesis = lossEntry ? { team: lossEntry[0], losses: lossEntry[1] } : null;
+    const confedEntry = (Object.entries(confedCount) as [Confederation, number][])
+      .filter(([, n]) => n > 0)
+      .sort((a, b) => b[1] - a[1])[0];
+    const confMeta = confedEntry ? AFFINITY_META.find(a => a.confed === confedEntry[0]) : undefined;
+    const topConfed = confedEntry && confMeta
+      ? { confed: confedEntry[0], title: confMeta.title, emoji: confMeta.emoji, count: confedEntry[1] }
+      : null;
+
+    const valueRank = value.records.findIndex(r => r.id === meId) + 1;
+    const valueRec = value.records.find(r => r.id === meId);
+    const koRec = ko.records.find(r => r.id === meId);
+
+    personal = {
+      id: meStat.id, name: meStat.name, avatar: meStat.avatar,
+      points: meStat.points, picks,
+      accuracy: picks > 0 ? Math.round((meStat.points / picks) * 100) : null,
+      rank, total: standings.length,
+      longestHot: meStat.longestHot, longestCold: meStat.longestCold,
+      currentStreak: meStat.current,
+      topTeam, nemesis, topConfed,
+      value: valueRec?.value ?? 0, valueRank,
+      rarest,
+      koHits: koRec?.koHits ?? 0, bottles: koRec?.bottles ?? 0,
+      timeline: meStat.timeline,
+    };
+  }
+
+  return {
+    finishedCount: finished.length,
+    koFinishedCount: ko.koFinished,
+    totalGoals, totalPicks,
+    biggestWin, highestScoring,
+    standings,
+    champion: standings[0] ?? null,
+    gambler: crowd.gambler, jockey: crowd.jockey,
+    valueKing: value.records.find(r => r.value > 0) ?? null,
+    hero: ko.hero, bottler: ko.bottler,
+    affinities,
+    personal,
+  };
+}
+
 // Display order of the knockout tree, fixed by the seed's feeder map so each
 // round's nodes sit between the two matches that feed them (top→bottom). Used by
 // the Bracket tab. The third-place match is a side fixture, kept out of the tree.

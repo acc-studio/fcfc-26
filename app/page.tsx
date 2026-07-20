@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
-import { Match, Player, Pick, BracketPrediction, ProSession, ProResponse, kickoffMs, BET_WINDOW_MS, isKnockout, teamsResolved, buildTeamForm } from '@/lib/data';
+import { Match, Player, Pick, BracketPrediction, ProSession, ProResponse, kickoffMs, buildTeamForm } from '@/lib/data';
 import { MatchCard } from '@/components/MatchCard';
 import { Emoji } from '@/components/Emoji';
 import { Leaderboard } from '@/components/Leaderboard';
@@ -10,6 +10,7 @@ import { Groups } from '@/components/Groups';
 import { Bracket } from '@/components/Bracket';
 import { BracketGame } from '@/components/BracketGame';
 import { Pro } from '@/components/Pro';
+import { Wrapped } from '@/components/Wrapped';
 import { auth, db } from '@/lib/firebase';
 import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { AuthModal } from '@/components/AuthModal';
@@ -19,7 +20,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { NotifyToggle } from '@/components/NotifyToggle';
 
 export default function WorldCupApp() {
-  const [activeTab, setActiveTab] = useState<'next' | 'upcoming' | 'past' | 'groups' | 'bracket' | 'table' | 'pro'>('next');
+  const [activeTab, setActiveTab] = useState<'past' | 'groups' | 'bracket' | 'table' | 'wrapped' | 'pro'>('past');
 
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [authModal, setAuthModal] = useState<{ isOpen: boolean; target: Player | null }>({
@@ -38,8 +39,6 @@ export default function WorldCupApp() {
   // Pro Clubs sessions (organize + RSVP).
   const [proSessions, setProSessions] = useState<ProSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  // Refreshed every minute so the 48h betting window closes live.
-  const [nowMs, setNowMs] = useState(() => Date.now());
   // Per-viewer "ignore" list (local only): players the current user has muted.
   // They drop out of this device's table, analytics and bet displays. Keyed by
   // the logged-in player so each profile on a shared device has its own list.
@@ -93,15 +92,12 @@ export default function WorldCupApp() {
       setProSessions(snap.docs.map(d => d.data() as ProSession));
     });
 
-    const tick = setInterval(() => setNowMs(Date.now()), 60_000);
-
     return () => {
       unsubMatches();
       unsubBets();
       unsubPlayers();
       unsubBrackets();
       unsubPro();
-      clearInterval(tick);
     };
   }, []);
 
@@ -139,29 +135,6 @@ export default function WorldCupApp() {
   // and no `teams` collection (the nations only play WC games now). Keyed by
   // team name, same shape the form strip consumed before.
   const teamForm = useMemo(() => buildTeamForm(matches), [matches]);
-
-  // A match is bettable now if it kicks off within the 48h window — and, for a
-  // knockout slot, only once the feeding round has resolved it to two real
-  // teams (you can't bet "Winner Group A"). Unresolved knockout slots fall
-  // through to Upcoming until the poller fills them in.
-
-  // Up Next = bettable window: not finalized and kicking off within 48h (plus
-  // any already-kicked-off matches still awaiting a result), soonest first.
-  const upNextMatches = useMemo(() =>
-    matches
-      .filter(m => m.status !== 'FINISHED'
-        && kickoffMs(m) <= nowMs + BET_WINDOW_MS && (!isKnockout(m) || teamsResolved(m)))
-      .sort((a, b) => kickoffMs(a) - kickoffMs(b)),
-    [matches, nowMs]);
-
-  // Upcoming = future fixtures not yet bettable (>48h out, or an unresolved
-  // knockout slot) — visible but not yet open.
-  const upcomingMatches = useMemo(() =>
-    matches
-      .filter(m => m.status !== 'FINISHED'
-        && !(kickoffMs(m) <= nowMs + BET_WINDOW_MS && (!isKnockout(m) || teamsResolved(m))))
-      .sort((a, b) => kickoffMs(a) - kickoffMs(b)),
-    [matches, nowMs]);
 
   // Past = finalized by the arbiter, most recent first.
   const pastMatches = useMemo(() =>
@@ -427,76 +400,6 @@ export default function WorldCupApp() {
           <div className="text-center py-20 font-mono text-gold animate-pulse">SYNCING FIXTURES...</div>
         ) : (
           <AnimatePresence mode="wait">
-            {activeTab === 'next' && (
-              <motion.div
-                key="next"
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
-                transition={{ duration: 0.3 }}
-                className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start"
-              >
-                {upNextMatches.length === 0 ? (
-                  <p className="lg:col-span-2 text-center py-16 font-mono text-xs uppercase tracking-widest text-paper/40">
-                    No matches kicking off in the next 48 hours.
-                  </p>
-                ) : (
-                  upNextMatches.map((match) => (
-                    <MatchCard
-                      key={match.id}
-                      match={match}
-                      userBets={bets}
-                      players={visiblePlayers}
-                      onPick={handlePick}
-                      onLockIn={handleLockIn}
-                      onSetResult={handleSetResult}
-                      onReopen={handleReopenResult}
-                      activeUser={currentUser || ''}
-                      isArbiter={isArbiter}
-                      homeForm={teamForm[match.home]}
-                      awayForm={teamForm[match.away]}
-                      locked={nowMs >= kickoffMs(match)}
-                    />
-                  ))
-                )}
-              </motion.div>
-            )}
-
-            {activeTab === 'upcoming' && (
-              <motion.div
-                key="upcoming"
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
-                transition={{ duration: 0.3 }}
-                className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start"
-              >
-                {upcomingMatches.length === 0 ? (
-                  <p className="lg:col-span-2 text-center py-16 font-mono text-xs uppercase tracking-widest text-paper/40">
-                    No further fixtures scheduled.
-                  </p>
-                ) : (
-                  upcomingMatches.map((match) => (
-                    <MatchCard
-                      key={match.id}
-                      match={match}
-                      userBets={bets}
-                      players={visiblePlayers}
-                      onPick={handlePick}
-                      onLockIn={handleLockIn}
-                      onSetResult={handleSetResult}
-                      onReopen={handleReopenResult}
-                      activeUser={currentUser || ''}
-                      isArbiter={isArbiter}
-                      homeForm={teamForm[match.home]}
-                      awayForm={teamForm[match.away]}
-                      notYetOpen
-                    />
-                  ))
-                )}
-              </motion.div>
-            )}
-
             {activeTab === 'past' && (
               <motion.div
                 key="past"
@@ -584,6 +487,23 @@ export default function WorldCupApp() {
               </motion.div>
             )}
 
+            {activeTab === 'wrapped' && (
+              <motion.div
+                key="wrapped"
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 10 }}
+                transition={{ duration: 0.3 }}
+              >
+                <Wrapped
+                  users={visiblePlayers}
+                  bets={bets}
+                  matches={matches}
+                  currentUser={currentUser}
+                />
+              </motion.div>
+            )}
+
             {activeTab === 'pro' && (
               <motion.div
                 key="pro"
@@ -610,38 +530,6 @@ export default function WorldCupApp() {
       {/* NAVIGATION BAR */}
       <nav className="fixed bottom-0 left-0 w-full z-50 border-t bg-pitch-900/80 border-chalk">
         <div className="max-w-2xl mx-auto flex">
-          {/* Up Next Tab */}
-          <button
-            onClick={() => setActiveTab('next')}
-            className={clsx(
-              "flex-1 py-6 text-center font-mono text-[10px] md:text-[11px] uppercase tracking-wide transition-colors relative whitespace-nowrap",
-              activeTab === 'next' ? "text-gold" : "text-paper/40 hover:text-paper"
-            )}
-          >
-            Up Next
-            {activeTab === 'next' && (
-              <motion.div layoutId="nav-indicator" className="absolute bottom-2 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-gold" />
-            )}
-          </button>
-
-          <div className="w-px bg-chalk my-4 opacity-50"></div>
-
-          {/* Upcoming Tab */}
-          <button
-            onClick={() => setActiveTab('upcoming')}
-            className={clsx(
-              "flex-1 py-6 text-center font-mono text-[10px] md:text-[11px] uppercase tracking-wide transition-colors relative whitespace-nowrap",
-              activeTab === 'upcoming' ? "text-gold" : "text-paper/40 hover:text-paper"
-            )}
-          >
-            Upcoming
-            {activeTab === 'upcoming' && (
-              <motion.div layoutId="nav-indicator" className="absolute bottom-2 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-gold" />
-            )}
-          </button>
-
-          <div className="w-px bg-chalk my-4 opacity-50"></div>
-
           {/* Past Tab */}
           <button
             onClick={() => setActiveTab('past')}
@@ -700,6 +588,22 @@ export default function WorldCupApp() {
           >
             Table
             {activeTab === 'table' && (
+              <motion.div layoutId="nav-indicator" className="absolute bottom-2 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-gold" />
+            )}
+          </button>
+
+          <div className="w-px bg-chalk my-4 opacity-50"></div>
+
+          {/* Wrapped Tab */}
+          <button
+            onClick={() => setActiveTab('wrapped')}
+            className={clsx(
+              "flex-1 py-6 text-center font-mono text-[10px] md:text-[11px] uppercase tracking-wide transition-colors relative whitespace-nowrap",
+              activeTab === 'wrapped' ? "text-gold" : "text-paper/40 hover:text-paper"
+            )}
+          >
+            Wrapped
+            {activeTab === 'wrapped' && (
               <motion.div layoutId="nav-indicator" className="absolute bottom-2 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-gold" />
             )}
           </button>
