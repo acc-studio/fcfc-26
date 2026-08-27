@@ -62,8 +62,15 @@ function classify(u: URL): Platform | null {
     return null;
   }
 
-  // reddit.com + subdomains (old./np./m.), plus the redd.it / v.redd.it / i.redd.it family.
-  if (hostIs(host, 'reddit.com') || hostIs(host, 'redd.it')) return 'reddit';
+  // The redd.it / v.redd.it / i.redd.it family always points at a single
+  // post or media file — accept unconditionally.
+  if (hostIs(host, 'redd.it')) return 'reddit';
+  // reddit.com + subdomains (old./np./m.): only a specific post (…/comments/…)
+  // or a share link (…/s/…). A bare /r/{sub} listing or /user/{name} profile
+  // would make yt-dlp enumerate many posts, so it is not treated as media.
+  if (hostIs(host, 'reddit.com')) {
+    return /\/comments\//.test(path) || /\/s\/[^/]+/.test(path) ? 'reddit' : null;
+  }
 
   if (hostIs(host, 'tiktok.com')) return 'tiktok';
 

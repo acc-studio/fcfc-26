@@ -64,6 +64,17 @@ describe('extractLinks — noise handling', () => {
     expect(extractLinks(msg({ text: '(see https://x.com/jack/status/22).' })))
       .toEqual([{ platform: 'twitter', url: 'https://x.com/jack/status/22' }]);
   });
+
+  it('ignores a bare subreddit listing or user profile (not a single post)', () => {
+    expect(extractLinks(msg({
+      text: 'https://www.reddit.com/r/aww/ and https://reddit.com/user/someone',
+    }))).toEqual([]);
+  });
+
+  it('still accepts i.redd.it direct media links', () => {
+    expect(extractLinks(msg({ text: 'https://i.redd.it/abc123.jpg' })))
+      .toEqual([{ platform: 'reddit', url: 'https://i.redd.it/abc123.jpg' }]);
+  });
 });
 
 describe('extractLinks — entities and captions', () => {
